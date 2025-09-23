@@ -1,0 +1,574 @@
+\documentclass[submit]{smj}
+
+\usepackage{lineno}
+\usepackage[plain,noend]{algorithm2e}
+\usepackage{bm}
+\usepackage{csquotes}
+\usepackage{dsfont}
+\usepackage[subscriptcorrection]{newtxmath}
+\usepackage{newtxtext}
+\usepackage{tikz}
+\usepackage[normalem]{ulem}
+\usepackage{xcolor}
+
+\makeatletter
+\renewcommand{\algocf@captiontext}[2]{#1\algocf@typo. \AlCapFnt{}#2} % text of caption
+\renewcommand{\AlTitleFnt}[1]{#1\unskip}% default definition
+\def\@algocf@capt@plain{top}
+\renewcommand{\algocf@makecaption}[2]{%
+  \addtolength{\hsize}{\algomargin}%
+  \sbox\@tempboxa{\algocf@captiontext{#1}{#2}}%
+  \ifdim\wd\@tempboxa >\hsize% 
+    \hskip .5\algomargin%
+    \parbox[t]{\hsize}{\algocf@captiontext{#1}{#2}}% then caption is not centered
+  \else%
+    \global\@minipagefalse%
+    \hbox to\hsize{\box\@tempboxa}% else caption is centered
+  \fi%
+  \addtolength{\hsize}{-\algomargin}%
+}
+\makeatother
+
+%%% User-defined macros should be placed here, but keep them to a minimum.
+\def\Bka{{\it Biometrika}}
+\def\AIC{\textsc{aic}}
+\def\T{{$\mathrm{\scriptscriptstyle T}$}}
+\def\v{$\varepsilon$}
+
+%\addtolength\topmargin{35pt}
+\DeclareMathOperator{\Thetabb}{\mathcal{C}}
+
+% short cuts for blue or red colored text
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+\newcommand{\blue}[1]{\textcolor{blue}{#1}}
+
+\Author{Andreas Groll\Affil{1}, 
+        Maria Iannario\Affil{2},
+        Thomas Kneib\Affil{3},
+        \and Nikolaus Umlauf\Affil{4}
+}
+\AuthorRunning{Andreas Groll \textrm{et al.}}
+
+\Affiliations{
+
+  %%% 1
+\item Department of Statistics,  
+      TU Dortmund University,
+      Dortmund,
+      Germany
+
+  %%% 2
+\item Department of Political Science,
+      University of Naples Federico II, 
+      Naples,
+      Italy
+
+  %%% 3
+\item Department of Statistics,
+      Georg-August-Universit\"at G\"ottingen,
+      G\"ottingen,
+      Germany
+
+  %%% 4
+\item Department of Statistics,
+      Universit\"at Innsbruck,
+      Innsbruck,
+      Austria
+}
+
+\CorrAddress{Andreas Groll, 
+             Department of Statistics, 
+             TU Dortmund University, 
+             Vogelpothsweg 87, M 211, 
+             44227 Dortmund, 
+             Germany}
+\CorrEmail{groll@statistik.tu-dortmund.de}
+
+\Title{Regularization in partially ordered STAR models with \textit{don't know} option}
+\TitleRunning{STAR models regularization}
+
+\Abstract{
+This manuscript deals with an extension of generalized additive models for analyzing regression data when the dependent variable is expressed by means of a partially ordered Likert scale including the \enquote{don't know} option. The proposed approach introduces a bivariate latent structure that jointly models the \enquote{don't know}  decision and the subsequent ordinal response, allowing for flexible non-linear covariate effects and spatial heterogeneity. A central contribution is the use of regularization techniques to perform covariate selection and to distinguish informative predictors from noise in the presence of high-dimensional categorical variables. Estimation is carried out via a GAMLSS-based framework, enabling the combination of smooth terms, group penalties, and fused penalties. The model is evaluated through a simulation study and applied to the Italian Survey on Household Income and Wealth (SHIW), highlighting the role of geographic disparities and sociodemographic characteristics in shaping self-perceived income instability and the choice of the \enquote{don't know}  option.}
+
+\Keywords{
+``Don't know'' option; Partially Ordinal  data; Mixed models; Regularization.
+}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+In survey-based research, a recurrent methodological challenge concerns the treatment of {\it \enquote{don't-know}} (dk) responses, particularly in the context of Likert-type scales. These scales are designed to capture nuanced attitudes, opinions, or perceptions; however, the inclusion of a {\it \enquote{don't-know}} option introduces an alternative response path that challenges conventional assumptions about ordinal data. Classical strategies either treat dk responses as missing (Rubin et al., 1995), collapse them into incorrect answers (Mondak, 2001), or, in the case of odd-point scales, merge them with intermediate categories. Yet, all of these approaches risk discarding meaningful information. A growing body of literature instead suggests that dk responses reflect distinct forms of uncertainty-both aleatoric and epistemic-that warrant explicit modelling.
+
+These approaches originate from an idea whereby the response process is based on a two-step process (i.e., a tree structure for categorical data) that first indicates the propensity to respond (\enquote{dk} versus own response) and then, once this has been assessed, in the classical category choice on an ordinal scale (see Gueorguieva et al 2020). Response tree models are based on the sequential process such that (1) the response categories can
+be represented with a binary response, and (2) the response process can be interpreted
+as a sequential process of going through the tree to its end nodes (see, among others, De Boeck and Partchev, 2012). Another relevant stream of work has considered the distinction between uninformed and
+partially informed respondents, who may declare \enquote{don't know} not only because of ignorance but also due to uncertainty about their knowledge
+ (see Manisera and Zuccolotto, 2014, Iannario et al 2020).
+ In the latter case, a key concern in the measurement of latent variables is that respondents answering \enquote{dk} may in fact possess partial knowledge, which differs from those who are genuinely uninformed. Hence, it is crucial to investigate their weight in the response process and their level of uncertainty. Furthermore, personality-driven differences in the willingness to guess may distort traditional knowledge measures, raising further challenges.
+
+The present contribution fits into this context by proposing models with high-dimensional vectors of regression coefficients that affect both stages of the response process. 
+
+More specifically, the paper deals with data collected through multiple observations for a population of individuals or units. For each unit, spatial information (location or site) is also available, enabling the assessment of territorial disparities in addition to covariate effects. Based on these data, the impact on the response, together with the effects of other covariates, is analyzed.
+
+The manuscript introduces an extension of the structured additive regression (STAR) models (Kneib and Fahrmeir, 2006), a rich class of regression models that include the generalized linear model (GLM) and the generalized additive model (GAM), by incorporating the explicit modelling of the  \enquote{dk}  option.
+
+It takes into account the complex covariate selection process affecting both the dichotomous and ordinal response components, by assuming specific penalization strategies for each. 
+Starting from the procedure outlined in St\"adler et al (2024),  Fahrmeir et al (2004), Kneib and Lang (2003), and \cite{GroHaKneUm:2019}, the contribution proposes
+a penalization approach for mixture regression models with partially ordered categorical outcomes.
+
+Thus, the novelty of this contribution can be summarized as follows: 
+\begin{itemize}
+  \item extending the ordinal STAR model by explicitly incorporating the \enquote{dk} option,
+  \item introducing penalization techniques
+    (LASSO, group LASSO, fused LASSO) to enable variable selection and effect fusion, thus handling high-dimensional covariates efficiently.
+  \item implementing the procedure on official survey data (SHIW), ensuring transparency and reproducibility. %SHIW data\footnote{https://www.bancaditalia.it/statistiche/tematiche/indagini-famiglie-imprese/bilanci-famiglie/index.html?com.dotmarketing.htmlpage.language=1}.
+\end{itemize}
+
+What sets this contribution apart is its ability to combine flexible modelling of uncertainty, explicit treatment of \enquote{dk} responses, and automatic variable selection within a unified framework. This is particularly relevant in contexts where geographic disparities and socio-demographic heterogeneity play a central role in shaping subjective responses.
+
+To illustrate the potential of the method, we conduct a simulation study and an empirical application to the Italian Survey on Household Income and Wealth (SHIW\footnote{\url{https://www.bancaditalia.it/statistiche/tematiche/indagini-famiglie-imprese/bilanci-famiglie/index.html?com.dotmarketing.htmlpage.language=1}}, underlining the importance of flexible and penalized modelling strategies in extracting meaningful patterns from complex survey data.
+
+\section{Ordinal Structured Additive Regression for dk}\label{sec:2}
+
+In the following, we provide a more detailed introduction to the ordinal structured additive regression model for dk. First, the observation model will be presented in Subsection~\ref{sec:obs:model}. Next, the dependence structure between the response distributions will be addressed (Subsection~\ref{subsec:depend}), before regularization techniques via penalization are proposed in Subsection~\ref{subsec:penal}. Finally, in Subsection~\ref{subsec:inference}, aspects of inference are discussed.
+
+\subsection{Observation Model}\label{sec:obs:model}
+
+[TK: Maybe something that we can also reference as an earlier bivariate ordinale model: https://doi.org/10.1002/bimj.201200161]
+
+\textcolor{red}{[M. Iannario: For Thomas. Do you think it would be appropriate to remove the temporal component and focus only on the spatial effect, leaving the aspect of repeated measures over time for the next contribution?]}
+
+To model ordinal outcomes while simultaneously accounting for the possibility of \enquote{don't know} (\enquote{dk}) answers, we represent the outcome of individual $i$ ($i=1, \ldots, I$) at occasion $t$ ($t=1, \ldots, T)$ and location $s\in\mathcal{S}$ for some spatial domain $\mathcal{S}$ in terms of two response components:
+\begin{itemize}
+    \item $Y_{it1}(s)$ as the binary indicator representing the decision of the individual to opt for the dk answer, i.e.\ $Y_{it1}(s)=1$ if the dk option is chosen and $Y_{it1}(s)=0$ otherwise.
+    \item $Y_{it2}(s)\in\{1,\ldots,C\}$ as the ordinal outcome if the individual decides to answer the item.
+\end{itemize}
+In general, both responses will be dependent and we will discuss different options for including this in the model later on. Furthermore, the responses are only partially observable in the sense that $Y_{it2}(s)$ can only be observed if $Y_{it1}(s)=0$, i.e.\ if the individual did not choose the \enquote{dk} option in the first place. Since it is plausible to assume that the decision not to answer a specific item depends on the actual outcome that would have been reported, including the possibility of dependence between the two outcome dimensions is crucial for reliably assessing uncertainties.
+
+To facilitate the model formulation, it is convenient to link the bivariate response vector $\bm{Y}_{it}(s)=(Y_{it1}(s), Y_{it2}(s))^\top$ to a bivariate vector of continuous latent variables $\bm{Y}^*_{it}(s)=(Y^*_{it1}(s), Y^*_{it2}(s))^\top$ where
+\[
+ Y_{it1}(s) = 0 \enspace\Leftrightarrow\enspace Y^*_{it1}(s) \le \alpha_{1,1}
+\]
+and
+\[
+Y_{it2}(s) = c \enspace\Leftrightarrow\enspace \alpha_{2,c-1}< Y^*_{it2}(s) \le \alpha_{2,c},\ c=1,\ldots,C\,,
+\]
+with ordered thresholds $-\infty= \alpha_{2,0} <\ldots < \alpha_{2,C}=+\infty$ and a single scalar threshold $\alpha_{1,1}\in\mathds{R}$.
+ 
+
+For both latent, continuous responses we then assume a spatio-temporal additive regression specification to account for different types of effects, i.e.
+\begin{equation}\label{eq:yhelp}
+ Y^*_{itd}(s) = \eta_{itd}(s) + \varepsilon_{itd}(s), \ d=1,2\,,
+\end{equation}
+where $\varepsilon_{itd}(s)$ are i.i.d.\ error terms with cumulative distribution function (CDF) $G_d(\cdot)$, and 
+\begin{equation}\label{predictor}
+ \eta_{itd}(s) = \bm{x}_{itd}(s)^{\top}\bm{\beta}_d +  
+                 \bm{z}_{itd}(s)^{\top}\bm{b}_{id} + 
+                 f_{1d}(u_{it1d}) + \ldots + f_{J_dd}(u_{itJ_dd}) + 
+                 \gamma_d(s)
+\end{equation}
+is a predictor consisting of the following components:
+\begin{itemize}
+    \item linear fixed effects $\bm{\beta}_d$ of covariates $\bm{x}_{itd}(s)$,
+    \item nonlinear effects $f_{jd}(u_{itjd})$ of continuous covariates $u_{itjd}$, $j=1,\ldots,J_d$,
+    \item random effects $\bm{b}_{id}$ of covariates $\bm{z}_{itd}(s)$ to account for intra-individual heterogeneity and dependence arising from the longitudinal data structure, and
+    \item spatial effects $\gamma_d(s)$.
+\end{itemize}
+To ensure identifiability, the fixed effects are assumed to not comprise an intercept which is rather represented via the thresholds in the model formulation (\ref{predictor}).\bigskip
+
+Assuming that $ \pmb{\varepsilon}_{it}(s)=(\varepsilon_{it1}(s),\varepsilon_{it2}(s))^\top$ follows a bivariate distribution with CDF $\mathcal{G}_\varepsilon$ with marginal CDFs $G_{\varepsilon_1}$ and $G_{\varepsilon_2}$ for $\varepsilon_{it1}(s)$ and $\varepsilon_{it2}(s)$, respectively, the conditional likelihood for $\pmb{Y}_{it}(s)$ given the random effects $\bm{b}_i=(\bm{b}_{i1}^{\top},\bm{b}_{i2}^{\top})^{\top}$ and spatial effects $\pmb{\gamma}(s) = (\gamma_1(s),\gamma_2(s))^{\top}$ for partially observed responses due to the respondent choosing the DK option ($Y_{it1}(s)=1$) is  
+\begin{eqnarray*}
+    P(Y_{it1}(s)=1\,|\,\pmb{b}_i,\pmb{\gamma}(s)) &=& P(Y_{it1}^*(s) > \alpha_{1,1}\,|\,\pmb{b}_i,\pmb{\gamma}(s))\\
+    &=& 1-P(\varepsilon_{it1}(s)\le \alpha_{1,1} - \eta_{it1}(s))\\
+    &=& 1-G_{\varepsilon_1}(\alpha_{1,1}-\eta_{it1}(s))
+\end{eqnarray*}
+
+If the respondent decides to answer the question ($Y_{it1}=0$), the conditional likelihood is given by
+   \begin{eqnarray*}
+    P(Y_{it1}(s) =0, Y_{it2}(s)=c\,|\,\pmb{b}_i,\pmb{\gamma}(s)) &=& P(Y_{it1}^*(s)\le\alpha_{1,1}, \alpha_{2,c-1}< Y_{it2}^*(s)\le\alpha_{2,c}\,|\,\pmb{b}_i,\pmb{\gamma}(s))\\
+  &=&\mathcal{G}_\varepsilon(\alpha_{1,1}-\eta_{it1}(s), \alpha_{2,c}-\eta_{it2}(s))\\
+  && -\, \mathcal{G}_\varepsilon(\alpha_{1,1}-\eta_{it1}(s),\alpha_{2,c-1}-\eta_{it2}(s))
+\end{eqnarray*}
+
+From the conditional likelihood, we obtain the marginal likelihood by integrating out random effects and spatial effects. %But do we really need the marginal likelihood?
+
+\subsection{Dependence between the response dimensions}\label{subsec:depend}
+
+Previous models for partially observed ordinal responses with \enquote{dk} option assumed local independence between the two response components (see Gueorguieva et al, 2021) or between multiple responses given a latent trait (see Huggins-Manley et al. 2017, among others). To overcome this restriction, we consider the following options:
+\begin{itemize}
+    \item Correlate the error terms between the two models, i.e., assume that the joint CDF $\mathcal{G}_\varepsilon$ does not decompose into the product of the two marginal CDFs $G_{\varepsilon_1}$ and $G_{\varepsilon_2}$ but involves dependence, implemented e.g.\ via a copula. In the easiest case, when both marginal CDFs are standard normal, the dependence can be achieved by assuming a bivariate normal $\pmb{\varepsilon}_{it}(s)\sim N(\bm{0}, \bm{\Sigma}_\varepsilon)$, where $\bm{\Sigma}_\varepsilon$ is a bivariate covariance matrix with unit diagonal and non-zero off-diagonal correlation parameter $\rho$, i.e.
+  \begin{equation}\label{eq:sigma}
+    \bm{\Sigma}_\varepsilon = \begin{pmatrix}
+        1 & \rho\\
+        \rho & 1
+    \end{pmatrix}.
+    \end{equation}
+    In this particular case, we obtain the conditional distribution
+    \[
+    \pmb{Y}^*_{it}(s)\,|\,\pmb{b}_i,\pmb{\gamma}(s) \sim N( \pmb{\eta}_{it}(s), \bm{\Sigma}_\varepsilon).
+    \]
+    
+    \item Correlate between the two predictors, e.g., in case of correlated random effects assume
+    \[
+    \bm{b}_i=(\bm{b}_{i1}^{\top},\bm{b}_{i2}^{\top})^{\top} \sim N(\bm{0}, \bm{\Sigma}_b)\,,
+    \]
+    with covariance matrix $\bm{\Sigma}_b$ with non-zero off-diagonal block. Similarly, one could consider correlated spatial effects
+    \item Assuming shared effects, e.g. 
+    \[
+    \bm{b}_{i2} = \rho\,\bm{b}_{i1}\,,
+    \]
+    for shared random effects with association parameter $\rho$.
+\end{itemize}
+
+\subsection{Regularization via Penalties}\label{subsec:penal}
+
+In case of rather many potential covariates or categorical predictors, several types of  penalized estimation can be useful for different reasons:
+%    \item Achieve spatial smoothness of $\gamma_d(s)$ by assuming a Gaussian process / Gaussian Markov random field which leads to a smoothness penalty.
+%    \item Encourage shrinkage of random effects $\bm{b}_{id}$.
+\begin{itemize}
+\item to achieve variable selection,
+    \item to fuse effects of categorical covariates,
+    \item to fuse effects across different items.
+\end{itemize}
+More specifically, we follow the approach by \cite{GroHaKneUm:2019}, who have already implemented several penalty methods in the framework of GAMLSS. Particularly, three penalization options are provided:
+the conventional least absolute shrinkage and selection operator (LASSO) for metric or binary
+covariates \citep{Tibshirani:96}, and both group LASSO \citep{MeiGeeBue:2008} and fused LASSO \citep{GerTut:2010} for categorical predictors. For the fusion of effects, slightly different options for nominal or ordinal predictors are available.
+%Quadratic penalties / Gaussian random effects assumptions can be easily included in the estimation procedure, 
+For fitting, we rely on locally quadratic approximations of the penalties (see, e.g., \citealp{OelTutz:2017}), such that estimation can still be done with iterative procedures, such as Newton Raphson (NR), Fisher Scoring (FS) or iteratively weighted least squares (IWLS) estimation.
+
+\subsection*{L$_{1}$-type penalization} \label{sec:L1pen}
+
+Following \cite{GroHaKneUm:2019}, we introduce different L$_{1}$-type penalties, which are designed for linear covariate effects: the conventional LASSO for metric or binary predictors, and both group and fused LASSO variants for categorical covariates.
+The different penalization terms impose different kinds of shrinkage depending on the covariates' structure and the intentions of the modeler.
+In particular, group and fused LASSO penalties are designed for nominal and ordinal categorical predictors, addressing specific characteristics of those.
+Altogether, a term $\lambda\cdot J(\boldsymbol{\beta})$ is subtracted from the log-likelihood~\eqref{eq:loglik}, where $J(\boldsymbol{\beta})$ is a combination of (parts of) the four penalty terms introduced in this section, and $\lambda$ is a tuning parameter that controls the overall strength of each penalty.
+
+\subsubsection*{Standard LASSO}
+
+\noindent For (standardized) metric (or binary) covariates $x_{jk}$, following \citet{Tibshirani:96}, the absolute value of the corresponding data (scalar) regression coefficient $\beta_{jk}$ is penalized by the classic LASSO penalty, i.e.\ the penalty terms have the following form
+\begin{equation}\label{eq:pen:lasso}
+J_{\text{c}}(\beta_{jk})= | \beta_{jk} |\,.
+\end{equation}
+This penalty structure shrinks each individual regression coefficient towards zero. If an effect is sufficiently small, its regression coefficient can even be set exactly to zero, therefore excluding the corresponding covariate from the linear predictor $\eta_{\theta_k}$.
+The strength of the penalization is controlled by the global penalty parameter $\lambda$\,: for large values of $\lambda$, only the most influential covariates are retained and all other effects are shrunken to zero. On the contrary, for lower values of $\lambda$, shrinkage is smaller and fewer coefficients are excluded from the different linear predictors $\eta_{\theta_k}, k=1,\ldots, d$. Hence, the penalty parameter $\lambda$ plays the role of a tuning parameter: it controls the number of LASSO-penalized metric covariates that are related with the distribution parameters $\theta_k$ of the response variable.
+
+\subsubsection*{Group LASSO}
+
+\noindent For a (dummy-encoded) categorical covariate with corresponding group of dummies collected in covariate vector $\mathbf{x}_{jk}$ and vector $\boldsymbol{\beta}_{jk}$ of corresponding regression coefficients, the L$_2$-norm of $\boldsymbol{\beta}_{jk}$ is penalized by the group LASSO penalty (compare, e.g., \citealp{MeiGeeBue:2008}), i.e.\ the single penalty terms yield
+\begin{equation}\label{eq:pen:grplasso}
+J_{\text{g}}(\boldsymbol{\beta}_{jk})= \sqrt{df_{jk}}\cdot || \boldsymbol{\beta}_{jk} ||_2\,,
+\end{equation}
+where $df_{jk}$ is the size of the $jk$-th group of dummy variables. The factors $\sqrt{df_{jk}}$ are used to rescale the penalty terms
+with respect to the dimensionality of the parameter vectors $\boldsymbol{\beta}_{jk}$, see also \citet{YuanLin:2006}.
+They ensure that the penalty terms are of the
+order of the number of parameters and, hence, are comparable to the conventional LASSO-penalty~\eqref{eq:pen:lasso}. Consequently,
+if $J(\boldsymbol{\beta})$ is a combination of penalties for both metric covariates from~\eqref{eq:pen:lasso} and penalties for
+(dummy-encoded) categorical covariates from~\eqref{eq:pen:grplasso}, still a single overall penalty parameter $\lambda$ can be used.
+
+The effect of jointly penalizing the whole group of dummies corresponding to a categorical covariate via $|| \boldsymbol{\beta}_{jk} ||_2$
+is similar to the one of the standard LASSO penalty and one either obtains $\boldsymbol{\hat\beta}_{jk}=\boldsymbol{0}$ or $\hat\beta_{jkl}\neq 0$
+for all $l=1,\ldots,df_{jk}$. Consequently, a categorical predictor is either included (with all its respective dummies) or excluded completely from the respective linear predictor $\eta_{\theta_k}$.
+
+\subsubsection*{Fused  LASSO}
+
+\noindent Alternatively, for categorical covariates, clustering of categories with implicit factor selection is desirable. Again, let $\mathbf{x}_{jk}$ be a (dummy-encoded) categorical covariate with categories $l=0,1,\ldots,df_{jk}$ and corresponding coefficient vector $\boldsymbol{\beta}_{jk}$. By choosing $l=0$ as the reference category, we fix $\beta_{jk0}=0$. Depending on the nominal or ordinal scale level of the covariate, one of the following two penalties can be used (compare~\citealp{GerTut:2010}). For nominally scaled covariates, all possible pairwise differences of the regression effects are penalized by the fused LASSO penalty, for which the individual penalty terms are given~by
+\begin{equation}\label{eq:fused:lasso:nom}
+J_{\text{f}_{\text{n}}}(\boldsymbol{\beta}_{jk})=\sum\limits_{\substack{l>m\\ l,m\leq df_{jk}}} w_{lm}^{(jk)}\, | \beta_{jkl}- \beta_{jkm}|.
+\end{equation}
+For ordinal covariates, only the differences of neighboring regression effects are penalized. In this case, the penalty terms can be specified by
+\begin{equation}\label{eq:fused:lasso:ord}
+J_{\text{f}_{\text{o}}}(\boldsymbol{\beta}_{jk})=\sum\limits_{l=1}^{df_{jk}} w_l^{(jk)}\, | \beta_{jkl}- \beta_{jk,l-1}|\,,
+\end{equation}
+where $df_{jk}$ is the number of (free) dummy coefficients of the categorical predictor $\mathbf{x}_{jk}$, i.e.\ the number of levels minus one. Both $w_{lm}^{(jk)}$ and $w_l^{(jk)}$ denote suitable weights that are suggested in \citet{BonRei:2009}.
+In principle, the use of these weights can be motivated through standardization of the corresponding design matrix part, in analogy to standardization of
+metric predictors. For nominal covariates we use
+$$
+w_{lm}^{(jk)} = 2(df_{jk}+1)^{-1}\sqrt{\frac{n_l^{(jk)}+n_m^{(jk)}}{n}} \,,
+$$
+where  $(df_{jk}+1)$ is again the number of levels of the corresponding categorical predictor $\mathbf{x}_{jk}$ and
+$n_l^{(jk)}$ denotes the number of observations on level $l$.
+Hence, the weights account for different numbers of levels of different predictors and for different numbers of
+observations on different levels.
+
+Furthermore, notice also that an adaptive version of the weights can be used. Then, they contain additionally the factors
+$| \hat\beta_{jkl}^{(ML)}- \hat\beta_{jkm}^{(ML)}|^{-1}$, where $\hat{\boldsymbol{\beta}}_{jk}^{(ML)}$ denotes the unconstrained
+maximum likelihood (ML) estimate.
+The factor $(df_{jk}+1)^{-1}$ ensures that the penalties from~\eqref{eq:fused:lasso:nom} are comparable to the ordinal penalty terms from~\eqref{eq:fused:lasso:ord}. 
+For ordinal predictors, since the penalty terms \eqref{eq:fused:lasso:ord} are already of order $c_{jk}$, the corresponding weights
+$w_l^{(jk)}$ can be chosen as
+$$
+w_{l}^{(jk)} = \sqrt{\frac{n_l^{(jk)}+n_{l+1}^{(jk)}}{n}} \,.
+$$
+Similarly to the nominal case, adaptive versions of the weights are obtained
+by adding the factors $| \hat\beta_{jkl}^{(ML)}- \hat\beta_{jk,l-1}^{(ML)}|^{-1}$.
+Due to the adequately chosen weights $w_{lm}^{(jk)}$ and $w_l^{(jk)}$, we can combine the penalties from~\eqref{eq:fused:lasso:nom} and \eqref{eq:fused:lasso:ord} and still use a single penalty parameter. However,
+if a single penalty parameter is used, these penalties cannot be combined with those
+ given by \eqref{eq:pen:lasso} and \eqref{eq:pen:grplasso}, due to differences in orders and scaling procedures. If instead different tuning parameters are used for each of the four penalty types introduced above, they all can be combined. This way, also combinations of fusion and selection are possible.
+Notice also that for the fusion of effects, alternative weighting schemes are used in the literature, see, for example, \citet{ChiEtAl:2017}.
+
+Finally, note that the classical and group LASSO penalties given by \eqref{eq:pen:lasso} and \eqref{eq:pen:grplasso} could be extended in a similar way by choosing suitable adaptive weights.
+
+\subsection*{Some technical details}
+
+\noindent All proposed LASSO-type penalties can shrink coefficients of individual
+(groups of) covariates to zero and thereby perform variable selection. In the implementation 
+of \citet{GroHaKneUm:2019} within the \textbf{bamlss} package \citep{bamlss:jss}, the 
+optimal penalization is determined by a grid search with a single shrinkage parameter per 
+distributional predictor. This setup has two drawbacks: (i) computation becomes expensive as 
+soon as more than two predictors are included, and (ii) it is not possible to combine 
+different LASSO-type penalties within the same predictor, because all covariates must share 
+the same type of penalty.
+
+The new \textbf{gamlss2} package \citep{gamlss2:R} overcomes both issues. Each LASSO model term can now be assigned its own penalty,
+$$
+\lambda_{k} J^{(k)}(\boldsymbol{\beta}_k), \quad k = 1, \ldots, d
+$$
+and the corresponding shrinkage levels are estimated using an efficient stepwise selection 
+procedure inspired by the spline selection strategy of \citet{bamlss:jcgs}. Within the 
+estimation routines of \textbf{gamlss2}, notably the backfitting algorithm, we employ local 
+quadratic approximations for all penalty terms (see \citealp{OelTutz:2017}), which ensures 
+stable updates and fast convergence.
+
+With the per-term penalization different LASSO-type penalties can now 
+be freely mixed within a single predictor of a distributional parameter. For example, one 
+part of the predictor may use a group LASSO, while another uses a fused LASSO, with each 
+term optimized under its own penalty parameter. This yields highly flexible model 
+specifications without the comparability issues and computational burden of multi-
+dimensional grid search.
+
+\subsection{Inference}\label{subsec:inference}
+
+In this work, we propose to cast a bivariate ordinal regression model into the \textit{GAMLSS} (Generalized Additive Models for Location, Scale and Shape) framework (Rigby and Stasinopoulos, 2005), by leveraging the extended capabilities of the \texttt{gamlss2} package. This approach allows for flexible modelling of not only the location (mean) of the response distribution, but also its scale and potentially shape parameters as functions of explanatory variables.
+
+Specifically, we aim to model \textit{bivariate ordinal responses}---that is, two ordinal outcome variables observed jointly---by defining a new bivariate family within the GAMLSS infrastructure. The proposed model structure accounts for the marginal ordinal distributions of each response and their possible dependence, for instance via a latent correlation structure or shared random effects.
+
+To estimate the model parameters, we employ advanced numerical optimization techniques implemented within the \texttt{gamlss2} estimation engine, which ensure efficient and stable convergence of the maximum likelihood estimates using a \textit{Newton-Raphson (NR)} based backfitting algorithm essentially reducing to \textit{Iteratively Reweighted Least Squares (IWLS)} updating steps (for details, see \citealp{bamlss:jcgs})
+
+The flexibility of the GAMLSS framework facilitates the inclusion of non-linear effects (e.g., splines), interactions, and different link functions for each parameter of the distribution. However, a key requirement is the definition of a custom \textit{bivariate ordinal family}, which entails:
+\begin{itemize}
+  \item specifying the joint log-likelihood function for the bivariate ordinal response,
+  \item defining score functions and second derivatives for estimation,
+  \item ensuring compatibility with the GAMLSS estimation routines.
+\end{itemize}
+
+A valuable reference in this context is the \texttt{mvord} package (Hirk et al. 2020), which implements multivariate ordinal regression models using a variety of correlation structures. Although \texttt{mvord} is not directly integrated with the GAMLSS framework, it provides a conceptual and computational basis for modelling multivariate ordinal outcomes, including strategies for dealing with threshold structures, latent normal variables, and parameter identification.
+
+By drawing from the methodology and implementation details in \texttt{mvord}, we aim to create a bivariate ordinal family suitable for GAMLSS modelling. This will allow us to exploit:
+\begin{itemize}
+  \item semi-parametric regression techniques (via additive terms in GAMLSS),
+  \item heteroscedastic and skewed models for ordinal data,
+  \item and potentially extend the approach to higher dimensions. %in future work.
+\end{itemize}
+
+This strategy bridges the gap between flexible distributional modelling (GAMLSS) and structured multivariate ordinal modelling (\texttt{mvord}), offering a novel framework for analyzing complex ordinal data structures.
+
+\section{Simulation}\label{sec:simulation}
+To evaluate the performance of our model and illustrate the effectiveness of Lasso regularization in identifying relevant effects, we provide a small simulation study.
+
+First, we draw six categorical predictors, $x_1,\ldots,x_6$, with four to six levels each. However, for both linear predictors involved, only one of them is relevant, namely:
+\begin{eqnarray*}
+  \eta_{i1} & = &  \mathbf{x}_{i1}^\top\boldsymbol{\beta}_1\,, \\
+  \eta_{i2} & = & \mathbf{x}_{i4}^\top\boldsymbol{\beta}_4\,,  
+\end{eqnarray*}
+with $\boldsymbol{\beta}_1= (0,0.5,-0.4,0.3,-0.4)^\top,
+\boldsymbol{\beta}_4 = (0,-0.4,0.4,0.5,-0.5)^\top
+$, and $\mathbf{x}_{i1}, \mathbf{x}_{i4}$ being the dummy-encoded covariate vectors belonging to the factor variables $x_1$ and $x_4$, respectively. Hence, the other factor variables are noise and do not have an effect on the responses.
+
+Then, we draw two latent responses with the mechanism of \eqref{eq:yhelp}, where we use $\boldsymbol{\Sigma}_\varepsilon$ with the structure given in \eqref{eq:sigma}, and choose $\rho=0.5$. 
+\textcolor{red}{[M. Iannario: For Andreas. Perhaps we could create a more complex simulation by varying the correlation (either increasing or decreasing it).]}Moreover, we vary sample sizes, using $n\in\{50, 100, 200,300,400,500,750,1000\}$, and repeatedly draw 100 samples per $n$.
+
+For the binary response $Y_1$ representing the \enquote{dk} option, we specify $\alpha_{1,1}=0$, while the ordinal response categories of $Y_2$
+are determined by 
+$\boldsymbol{\alpha}_2 = (-\infty, -1, 0, 1, \infty)^\top$. 
+We fit the model via our GAMLSS-based implementation and employ a group Lasso penalty to perform variable selection on the categorical predictors.
+
+To assess goodness-of-fit, we focus on MSEs of the vector collecting all unknown parameters, which are displayed as boxplots in Fig.~\ref{fig:box}. 
+Unsurprisingly, the MSE increases for smaller sample sizes, but seems to be still quite stable for moderate $n$. 
+Moreover, Fig.~\ref{fig:paths} illustrates the coefficient paths for an arbitrary simulation run and $n=500$. 
+We can see that for this run, the group Lasso correctly selects the categorical features $x_1$ and $x_4$, while all other features correctly excluded.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.99\textwidth]{figures/simulation_mse}\vspace*{-0.3cm}
+  \caption{\label{fig:box} Boxplots of MSE for varying sample sizes $n$,
+    each based on 100 simulation runs}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/simulation_paths}\vspace*{-0.2cm}
+  \caption{\label{fig:paths}Coefficient paths of the six categorical predictor
+    effects; features $x_1$ - $x_3$ and $x_4$ - $x_6$ belong to linear predictor
+    $\eta_1$ and $\eta_2$, respectively, the latter two being noise in both cases;
+    vertical dashed line shows optimal penalty strength}
+\end{figure}
+
+\section{Empirical Application}\label{sec:application}
+
+This empirical study is based on the 2012 wave of the Italian Survey on Household Income and Wealth (SHIW), conducted by the Banca d'Italia. The SHIW is a nationally representative survey that collects detailed information on the income, wealth, consumption, and sociodemographic characteristics of Italian households. The 2012 edition includes a special focus on subjective economic evaluations and expectations, which makes it particularly suitable for analysing self-perceived income conditions in a period of economic uncertainty.
+
+Among the subjective modules, respondents were asked the following question:
+
+\begin{quote}
+\emph{`Considering the total income of your household in 2012, would you say that it was unusually high, unusually low, or normal with respect to the yearly income your household generally makes in a normal year?'}
+\end{quote}
+
+\noindent This ordinal variable provides a direct measure of perceived income shocks and serves as a proxy for subjective income stability. The possible responses include: \textit{`Unusually high'}, \textit{`Normal'}, \textit{`Unusually low'}, and a residual category \textit{`Don't know'} for uncertain or noninformative answers. This variable is particularly useful for identifying households that have experienced transitory income gains or losses relative to their usual financial situation, offering insight beyond traditional income measures.
+
+The analysis focusses on modelling this partially ordered categorical variable using some covariates related to demographic, geographic, and economic conditions, including:
+\begin{itemize}
+  \item[-] Age of the respondent
+    (\texttt{age}, $22-88$ years);
+  \item[-] Gender of the respondent
+    (\texttt{gender}, \texttt{0} = '\emph{female}', \texttt{1} = `\emph{male}');
+  \item[-] Marital status of the respondent 
+    (\texttt{marital}, \texttt{1} = '\emph{married/civil union}',
+    \texttt{2} = '\emph{single}', \texttt{3} = '\emph{seperated/divorced}',
+    \texttt{4} = '\emph{widowed}');
+  \item[-] Geographic area of residence
+    (\texttt{geo}, \texttt{1} = '\emph{Northwest}',
+    \texttt{2} = '\emph{Northeast}', \texttt{3} = '\emph{Central}',
+    \texttt{4} = '\emph{South}', \texttt{5} = '\emph{Islands}');
+  \item[-] Status of the worker
+    (\texttt{status}, \texttt{1} = '\emph{manual worker}',
+    \texttt{2} = '\emph{white-collar worker}',
+    \texttt{3} = '\emph{executive/manager}',
+    \texttt{4} = '\emph{entrepreneur/self-employed}',
+    \texttt{5} = '\emph{other self-employed}',
+    \texttt{6} = '\emph{retired}',
+    \texttt{7} = '\emph{other unemployed}');
+  \item[-] Household size (\texttt{hhs}, number of people
+    aged $\geq 1$ years living in the household).
+\end{itemize}
+
+
+These covariates are strongly supported in the literature on perceived income shocks and financial vulnerability. For example, older individuals and those nearing retirement often report greater income insecurity due to fixed incomes and limited flexibility in labour markets (Lusardi et al., 2011). Households headed by single parents or women are more likely to experience and perceive income drops (Addo, 2016). Additionally, larger households typically have higher baseline expenses, making them more sensitive to even minor income fluctuations (Bick and Choi 2012; Deaton 1997).
+
+Geographic context also plays a crucial role: regional disparities in labour markets and cost of living shape subjective evaluations of income stability, especially in rural compared to urban settings (Reardon et al., 2008). Finally, employment status and, particularly transitions into unemployment or precarious employment, have been shown to significantly increase perceptions of economic shock and insecurity (Cappellari \& Jenkins, 2008).
+
+In our analysis the goal is to explore the structure of perceived income instability across different population groups, using flexible statistical tools that account for both ordered categories and the presence of the `Don't know' response. The use of the model introduced in Section~\ref{sec:2} with a custom ordinal family allows for capturing both linear and non-linear covariate effects, while estimating latent components related to decision uncertainty and response structure.
+
+This case study contributes to the growing literature on subjective income evaluations, offering methodological insights and policy-relevant interpretations in the context of economic vulnerability and social perception.
+
+The results are about a partially ordered categorical response with a `Don't know' option modelled through two latent components:
+\begin{itemize}
+  \item $Y^*_1$: latent mean for the `Don't know'  response process;
+  \item $Y^*_2$: latent mean for the ordered categories (\emph{`Unusually low', `Normal', `Unusually high'});
+  \item $\rho$: latent correlation between the two processes.
+\end{itemize}
+The predictors introduced in Section~\ref{sec:2} are specified as:
+\begin{equation}\label{smooth}
+\begin{aligned}
+\eta_{1} &= f_{1}(x_{1}) + f_{2}(x_{3}) + f_{3}(x_{5}), \\
+\eta_{2} &= f_{4}(x_{2}) + f_{5}(x_{3}) + f_{6}(x_{4}) + f_{7}(x_{5}),
+\end{aligned}
+\end{equation}
+where $f_j(\cdot)$ can be different effect-types, e.g. smooth functions, or classic LASSO, group or fused LASSO penalized effects. In the following, after evaluating several options, we will use a smooth function for the first continuous covariate and group LASSO for categorical predictors.
+
+The overall probability of observing a response in category \(c\) (including `Don't know') is derived from a bivariate latent distribution over \((\eta_1, \eta_2, \rho)\), where the observed ordinal variable is a function of the comparison between latent propensities and ordered thresholds, as defined in the model structure.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.75\textwidth]{figures/age_effects}\vspace*{-0.4cm}
+  \caption{\label{fig:ageeffects} Estimated smooth effects of covariate
+    \texttt{age} on $\eta_1$ and $\eta_2$.}
+
+  \vspace*{0.8cm}
+
+  \includegraphics[width=1\textwidth]{figures/model_paths}\vspace*{-0.2cm}
+  \caption{\label{fig:coef} Coefficient paths of the predictor effects;
+    top row represents predictor $\eta_1$ and bottom row $\eta_2$;
+    vertical dashed line shows optimal penalty strength.}  
+\end{figure}
+
+The estimated coefficients for the parametric part (intercepts of $\rho$ and thresholds) 
+are very small in magnitude and all associated with large standard errors with $p$-values (all $p > 0.8$). This indicates that the fixed effects 
+do not contribute substantially to explaining variation in the latent components. 
+
+On the other hand, the smooth terms highlight relevant non-linear contributions.
+
+The effective degrees of freedom (edf) indicate that covariate \texttt{marital} (in both components) and \texttt{geo}  
+are associated with clear non-linear patterns (edf $\approx 3$ and $\approx 4$, respectively).  
+Variable \texttt{status} shows a strong contribution in the first component (edf $\approx 4$)  
+and a nearly linear effect in the second (edf $\approx 0.8$).  
+By contrast, \texttt{age} behaves almost linearly (edf $\approx 1$),  
+while \texttt{gender} has a comparably small effect (edf $\approx 1$).  
+The coefficient paths displayed in Figures~\ref{fig:coef} confirm the findings from the empirical
+application. In particular, geographic area of residence (\texttt{geo}) show
+the strongest and clearly non-linear effects, as highlighted by their high effective degrees of
+freedom. Marital status (\texttt{marital}) also 
+shows relevant though weaker effects. In contrast, \texttt{gender} and employment \texttt{status} 
+remain largely irrelevant, with coefficients close to zero across the penalization path. 
+Overall, these visual results support the interpretation that flexible non-linear modeling
+is crucial to capture heterogeneity in the response process, and they reinforce the suitability
+of the penalized STAR framework in distinguishing informative covariates from noise.
+
+Overall, the model fitted to $n=478$ observations achieves a deviance reduction of about 
+29.96\% compared to the null model, with an AIC of 1328.9. Although the proportion of 
+explained deviance is moderate, the selected smooth terms provide evidence of non-linear 
+covariate effects that justify the use of a structured additive approach rather than a 
+purely parametric one. The results suggest that the probability of choosing 
+the don't know option is only weakly affected by socio-demographic covariates, 
+while perceived income conditions are more strongly shaped by marital status and geographical area, 
+with non-linear patterns. This reflects heterogeneous response behaviors that are not 
+captured by simple linear effects and highlights the importance of flexible modelling 
+to account for latent uncertainty in survey data.
+
+\section{Conclusion and Open Issues}
+
+The proposed framework advances ordinal regression modelling by explicitly accounting for `don't know' responses, thus addressing a common source of bias in survey data with partially ordinal scales. This structure allows for a more realistic representation of individual response behavior and heterogeneity, improving inference and interpretation in social and behavioral studies. Future research may expand this framework to accommodate dynamic networks or integrate with non-response imputation strategies. 
+
+An important open issue concerns the handling of item non-response, particularly when non-response is offered as an explicit alternative to the `don't know' option, as observed in the SHIW data analyzed. This raises the potential for a further generalization of the model, in which non-responses are treated as missing data and imputed through a model-based approach that jointly considers `don't know' responses. Such an extension would allow for a direct comparison with more conventional imputation strategies, such as:
+\begin{itemize}
+    \item imputation of both `don't know' and item non-response using classical data-driven methods based only on the observed ratings.
+\end{itemize}
+This comparison would help assess the added value and accuracy of the proposed approach relative to more naive competitors.
+
+%%% Supplementary materials (if any)
+%%% ------------------------------------------
+\section*{Supplementary materials}
+The supplementary materials include [the list of supplementary materials and their brief description]. They are available from the journals page at \url{https://journals.sagepub.com/home/smj}. [At the submission stage, all supplementary materials (or the links to access them) should be submitted jointly with the main paper.]
+
+%%% Acknowledgements (if any)
+%%% ------------------------------------------
+\section*{Acknowledgements}
+
+Maria Iannario gratefully acknowledges the support of the Marie Sk\l odowska-Curie Actions under the European Union's Horizon Europe research and innovation program for the Industrial Doctoral Network on Digital Finance (acronym: DIGITAL, project no. 101119635), the DAAD grant Research Stays for University Academics and Scientists, Center for Statistics Campus Institute Data Science (CIDAS), Georg-August-Universit\"at G\"ottingen, and PRIN 2022 - CUP: E53C24002270006. 
+
+This research was also (partially) funded in the course of TRR 391 \enquote{Spatio-temporal Statistics for the Transition of Energy and Transport} (520388526) by the Deutsche Forschungsgemeinschaft (DFG, German Research Foundation).
+
+%%% Declaration of conflicting interests (should always be included)
+%%% -----------------------------------------------------------------
+\section*{Declaration of conflicting interests}
+The authors declared no potential conflicts of interest with respect to the research, authorship and/or
+publication of this article.
+%%% Alternatively, please, disclose here potential conflicting interests. 
+
+%%% Funding (if any)
+%%% ------------------------------------------
+\section*{Funding}
+This is the place to mention the funding if it is applicable for the paper.
+
+%%% Appendix (if any)
+%%% ------------------------------------------
+\appendix
+\section*{Appendix}
+\section{Title of the first appendix section}
+This is the appendix text that authors want to include in the main paper not as supplementary materials.
+
+\section{Title of the second appendix section}
+
+%%% References if bibTeX is used
+%%%
+%%% Please, do not specify any \bibliographystyle{} command!
+%%%
+%%% It is already specified in the smj.cls and its
+%%% second specification here causes error.
+%%% ------------------------------------------------------------
+\bibliography{literatur.bib}
+
+\end{document}
+
