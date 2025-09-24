@@ -36,8 +36,8 @@ loglik <- function(eta1, eta2, rho, alpha1, alpha2, y, log = TRUE) {
   
   Sigma <- matrix(c(1, 0, 0, 1), 2, 2)
   
-  index.ones <- which(y1==1)
-  index.zeros <- which(y1==0)
+  index.ones <- which(y1 == 1)
+  index.zeros <- which(y1 == 0)
   
   ll[index.ones] <- log(1 - pnorm(alpha1[2] - eta1[index.ones]))
   
@@ -50,8 +50,8 @@ loglik <- function(eta1, eta2, rho, alpha1, alpha2, y, log = TRUE) {
   upper <- rbind(alpha1[2] - eta1[index.zeros],
     alpha2[y2[index.zeros]+2] - eta2[index.zeros])
 
-  ll[index.zeros] <- lpmvnorm(lower=lower, upper=upper, mean=mu, chol=chSigma, 
-    logLik=FALSE, M=250)
+  ll[index.zeros] <- lpmvnorm(lower=lower, upper=upper, mean=mu,
+    chol=chSigma, logLik=FALSE, M=250)
   
   if(log==FALSE)
     ll <- exp(ll)
@@ -67,7 +67,7 @@ dk3 <- function(...) {
     "links" = c("identity", "identity", "rhogit", "identity", "identity", "identity"),
     "d" = function(y, par, log = FALSE) {
       alpha1 <- c(-Inf, inc2cut(par$cutinc11[1]), Inf)
-      alpha2 <- c(-Inf, inc2cut(c(par$cutinc21[1],par$cutinc22[1])), Inf)
+      alpha2 <- c(-Inf, inc2cut(c(par$cutinc21[1], par$cutinc22[1])), Inf)
       
       eta1 <- par$mu1
       eta2 <- par$mu2

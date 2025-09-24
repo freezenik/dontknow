@@ -42,16 +42,19 @@ d$hhs <- as.factor(d$hhs)
 
 ## Attention: in the current way Thomas and I have
 ## implemented the log-likelihood function,
-## the ordinal response y has to be in {0, ..., C-1}!!!
-d$y2 <- d$y2 - 1
+## the ordinal response y has to be in {0, ..., C - 1}!!!
 
 ## Estimation in gamlss2.
 ## Response.
 d$Y <- cbind(d$y1, d$y2)
 
 ## Formula.
-f <- Y ~ -1 + s(age) + la(gender,type=2) + la(marital) +
-  la(geo,type=2) + la(status,type=2) + la(hhs,type=2) | .
+## tyoe = 1 -> simple lasso
+## type = 2 -> group lasso
+## type = 3 -> ordinal fused lasso
+## type = 4 -> nominal fused lasso
+f <- Y ~ -1 + s(age) + la(gender,type=2) + la(marital,type=2) +
+  la(geo,type=4) + la(status,type=2) + la(hhs,type=3) | .
 
 ## Estimate model.
 if(!file.exists("model.rds")) {
