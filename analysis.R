@@ -43,6 +43,7 @@ d$hhs <- as.factor(d$hhs)
 ## Attention: in the current way Thomas and I have
 ## implemented the log-likelihood function,
 ## the ordinal response y has to be in {0, ..., C - 1}!!!
+d$y2 <- d$y2 - 1
 
 ## Estimation in gamlss2.
 ## Response.
