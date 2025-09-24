@@ -50,7 +50,7 @@ d$y2 <- d$y2 - 1
 d$Y <- cbind(d$y1, d$y2)
 
 ## Formula.
-## tyoe = 1 -> simple lasso
+## type = 1 -> simple lasso
 ## type = 2 -> group lasso
 ## type = 3 -> ordinal fused lasso
 ## type = 4 -> nominal fused lasso
