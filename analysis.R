@@ -200,12 +200,11 @@ truth.coefs <- c(beta_1, rep(0,8), beta_2, rep(0,8), rho, 0, -1, 0, 1)
 
 ## Estimation in gamlss2.
 ## Response.
-d$Y <- cbind(y1, y2)
+#d$y2 <- d$y2 - 1???
+d$Y <- cbind(d$y1, d$y2)
 
-f <- Y ~ la(x1,type=2) + la(x2,type=2) + la(x3,type=2) |
+f <- Y ~ -1 + la(x1,type=2) + la(x2,type=2) + la(x3,type=2) |
   la(x4,type=2) + la(x5,type=2) + la(x6,type=2)
-
-source("fitting_routine.R")
 
 ## Estimate model.
 if(!file.exists("simmodel.rds")) {
