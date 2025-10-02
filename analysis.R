@@ -200,7 +200,8 @@ truth.coefs <- c(beta_1, rep(0,8), beta_2, rep(0,8), rho, 0, -1, 0, 1)
 
 ## Estimation in gamlss2.
 ## Response.
-#d$y2 <- d$y2 - 1???
+## FIXME: d$y2 <- d$y2 - 1, like in the application, I would say
+##        no, we need to fix this in the family dk3() and dk4()???
 d$Y <- cbind(d$y1, d$y2)
 
 f <- Y ~ -1 + la(x1,type=2) + la(x2,type=2) + la(x3,type=2) |
@@ -213,6 +214,17 @@ if(!file.exists("simmodel.rds")) {
 } else {
   b <- readRDS("simmodel.rds")
 }
+
+## FIXME: rho is not recovered?
+par <- predict(b, type = "parameter")
+head(par$rho) ## Too small, should be 0.5!
+
+## FIXME: Also mu1 and mu2 don't look too good!
+par(mfrow = c(1, 2))
+plot(par$mu1, mu1)
+abline(0, 1)
+plot(par$mu2, mu2)
+abline(0, 1)
 
 pdf(file = "simulation_paths.pdf", width = 14 - 2*14/5, height = 9)
 
