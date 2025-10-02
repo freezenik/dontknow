@@ -202,6 +202,10 @@ truth.coefs <- c(beta_1, rep(0,8), beta_2, rep(0,8), rho, 0, -1, 0, 1)
 ## Response.
 ## FIXME: d$y2 <- d$y2 - 1, like in the application, I would say
 ##        no, we need to fix this in the family dk3() and dk4()???
+## AG: no, we did d$y2 <- d$y2 - 1 only as the likelihood wants to see y € {0,1,2}
+## AG: instead of y € {1,2,3}; but as far as I remember, in the simulations we have
+## AG: already y € {0,1,2,3} so it should be fine. But as there is generally 4 instead
+## AG: of 3 levels, we need dk4() instead if dk3() in the simulations
 d$Y <- cbind(d$y1, d$y2)
 
 f <- Y ~ -1 + la(x1,type=2) + la(x2,type=2) + la(x3,type=2) |
@@ -216,6 +220,7 @@ if(!file.exists("simmodel.rds")) {
 }
 
 ## FIXME: rho is not recovered?
+## AG: this can only be addressed if we all agree that the FIXME from above is okay
 par <- predict(b, type = "parameter")
 head(par$rho) ## Too small, should be 0.5!
 
