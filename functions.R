@@ -27,43 +27,41 @@ inc2cut <- function(inc) {
 
 ## Log-likelihood function.
 loglik <- function(eta1, eta2, rho, alpha1, alpha2, y, log = TRUE) {
-  y1 <- y[, 1]
-  y2 <- y[, 2]
-  
-  mu <- c(0, 0)
-  
-  ll <- rep(0, length(y1))
-  
-  Sigma <- matrix(c(1, 0, 0, 1), 2, 2)
-  
-  index.ones <- which(y1 == 1)
-  index.zeros <- which(y1 == 0)
-  
-  ll[index.ones] <- log(1 - pnorm(alpha1[2] - eta1[index.ones]))
-  
-  Sigma[1, 2] <- Sigma[2, 1] <- rho[1]
+  y1 <- y[, 1L]
+  y2 <- y[, 2L]
+
+  n  <- length(y1)
+  ll <- numeric(n)
+
+  rho <- pmin(0.999999, pmax(-0.999999, rho[1L]))
+
+  Sigma <- matrix(c(1, rho, rho, 1), 2, 2)
   chSigma <- chol(Sigma)
-  chSigma <- as.ltMatrices(t(chSigma))
+  chSigma <- mvtnorm::as.ltMatrices(t(chSigma))
 
-  lower <- rbind(rep(-Inf, length(index.zeros)),
-    alpha2[y2[index.zeros]+1] - eta2[index.zeros])
-  upper <- rbind(alpha1[2] - eta1[index.zeros],
-    alpha2[y2[index.zeros]+2] - eta2[index.zeros])
+  idx1 <- which(y1 == 1L)
+  if(length(idx1)) {
+    ll[idx1] <- pnorm(alpha1[2] - eta1[idx1], lower.tail = FALSE, log.p = TRUE)
+  }
 
-  ll[index.zeros] <- lpmvnorm(
-    lower = lower,
-    upper = upper,
-    mean = mu,
-    chol = chSigma,
-    logLik = FALSE,
-    M = 250
-  )
-  
+  idx0 <- which(y1 == 0L)
+  if(length(idx0)) {
+    lower <- rbind(rep(-Inf, length(idx0)),
+                   alpha2[y2[idx0] + 1L] - eta2[idx0])
+    upper <- rbind(alpha1[2] - eta1[idx0],
+                   alpha2[y2[idx0] + 2L] - eta2[idx0])
+
+    ll[idx0] <- lpmvnorm(lower = lower, upper = upper,
+                         mean = c(0, 0), chol = chSigma,
+                         logLik = FALSE, M = 250)
+  }
+
   if(!log)
     ll <- exp(ll)
-  
-  return(ll)
+
+  ll
 }
+
 
 ## Families.
 dk3 <- function(...) {
@@ -78,7 +76,7 @@ dk3 <- function(...) {
       eta1 <- par$mu1
       eta2 <- par$mu2
       
-      rho <- invrhogit(par$rho)
+      rho <- par$rho
       
       d <- loglik(eta1 = eta1, eta2 = eta2, rho = rho, alpha1 = alpha1,
         alpha2 = alpha2, y = y, log = log)
@@ -105,14 +103,17 @@ dk4 <- function(...) {
       eta1 <- par$mu1
       eta2 <- par$mu2
       
-      rho <- invrhogit(par$rho)
+      rho <- par$rho
       
-      d <- loglik(eta = eta1, eta2 = eta2, rho = rho, alpha1 = alpha1,
+      d <- loglik(eta1 = eta1, eta2 = eta2, rho = rho, alpha1 = alpha1,
         alpha2 = alpha2, y = y, log = log)
       
       return(d)
     }
   )
+#  f$initialize <- list(
+#    "rho" = function(y, ...) rep(0.5, length(y))
+#  )
   class(f) <- "gamlss2.family"
   return(f)
 }
