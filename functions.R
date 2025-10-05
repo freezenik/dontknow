@@ -27,8 +27,8 @@ inc2cut <- function(inc) {
 
 ## Log-likelihood function.
 loglik <- function(eta1, eta2, rho, alpha1, alpha2, y, log = TRUE) {
-  y1 <- y[,1]
-  y2 <- y[,2]
+  y1 <- y[, 1]
+  y2 <- y[, 2]
   
   mu <- c(0, 0)
   
@@ -50,10 +50,16 @@ loglik <- function(eta1, eta2, rho, alpha1, alpha2, y, log = TRUE) {
   upper <- rbind(alpha1[2] - eta1[index.zeros],
     alpha2[y2[index.zeros]+2] - eta2[index.zeros])
 
-  ll[index.zeros] <- lpmvnorm(lower=lower, upper=upper, mean=mu,
-    chol=chSigma, logLik=FALSE, M=250)
+  ll[index.zeros] <- lpmvnorm(
+    lower = lower,
+    upper = upper,
+    mean = mu,
+    chol = chSigma,
+    logLik = FALSE,
+    M = 250
+  )
   
-  if(log==FALSE)
+  if(!log)
     ll <- exp(ll)
   
   return(ll)
