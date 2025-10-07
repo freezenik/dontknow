@@ -2,8 +2,7 @@ import("gamlss2")
 import("mgcv")
 
 export(
-  "dk3",
-  "dk4"
+  "DK"
 )
 
 useDynLib(dontknow, .registration = TRUE)

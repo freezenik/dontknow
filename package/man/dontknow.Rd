@@ -1,7 +1,7 @@
 \name{dk4}
+\alias{DK}
+\alias{DK}
 \alias{dontknow}
-\alias{dk3}
-\alias{dk4}
 
 \title{Don't Know (DK) Family}
 
@@ -10,11 +10,12 @@
 }
 
 \usage{
-dk4(...)
+DK(k = 4, useC = TRUE)
 }
 
 \arguments{
-  \item{\dots}{Not used yet.}
+  \item{k}{Integer, the number of levels of y2. Defaul is \code{k = 4}.}
+  \item{useC}{Logical, should the C version of the log-likelihood be used?}
 }
 
 \details{
@@ -66,7 +67,7 @@ d$Y <- cbind(d$y1, d$y2)
 f <- Y ~ -1 + s(x1) | -1 + s(x2)
 
 ## estimate model
-b <- gamlss2(f, family = dk4, data = d)
+b <- gamlss2(f, family = DK, data = d)
 
 ## plot estimated effects
 plot(b)

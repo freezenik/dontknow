@@ -78,20 +78,21 @@ logLik_dontknow <- function(eta1, eta2, rho, alpha, y, log = TRUE)
 }
 
 ## Don't-know family: explicit thresholds as parameters.
-dk4 <- function(...)
+DK <- function(k = 4, useC = TRUE)
 {
+  names <- c("mu1", "mu2", "rho", "alpha1")
+  names <- c(names, paste0("alpha", 2:k))
+  links <- c("identity", "identity", "rhogit", rep("identity", k))
+
   f <- list(
-    family = "dk4",
-    ## Parameterization: alpha1 is the binary cut; alpha2 ... alpha4 are the ordinal cuts.
-    names  = c("mu1", "mu2", "rho", "alpha1", "alpha2", "alpha3", "alpha4"),
-    links  = c("identity", "identity", "rhogit", "identity", "identity", "identity", "identity"),
+    family = "DK",
+    ## Parameterization: alpha1 is the binary cut; alpha2 ... alphak are the ordinal cuts.
+    names  = names,
+    links  = links,
     d = function(y, par, log = FALSE) {
       ## Build the ordinal cut matrix and ensure ordering.
-      alpha <- cbind(par$alpha1, t(apply(cbind(par$alpha2, par$alpha3, par$alpha4), 1, inc2cut)))
-
-     useC <- list(...)$C
-     if(is.null(useC))
-       useC <- TRUE
+      alpha <- do.call("cbind", par[grep("alpha", names(par))])
+      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
 
      ll <- if(isTRUE(useC)) {
        logLik_dontknow_C
@@ -115,8 +116,6 @@ dk4 <- function(...)
   class(f) <- "gamlss2.family"
   f
 }
-
-dk3 <- dk4
 
 ## Fast C version.
 logLik_dontknow_C <- function(eta1, eta2, rho, alpha, y, log = TRUE) {
