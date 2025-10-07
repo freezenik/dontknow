@@ -1,0 +1,92 @@
+\name{dk4}
+\alias{dontknow}
+\alias{dk3}
+\alias{dk4}
+
+\title{Don't Know (DK) Family}
+
+\description{
+  Defines the don't know family.
+}
+
+\usage{
+dk4(...)
+}
+
+\arguments{
+  \item{\dots}{Not used yet.}
+}
+
+\details{
+  Details comming soon!
+}
+
+\value{
+  A \code{"gamlss2.family"} object to be used with \code{\link{gamlss2}}.
+}
+
+\seealso{
+  \code{\link{gamlss2}}, \code{\link{gamlss2.family}}, \code{\link[MASS]{polr}}
+}
+
+\examples{\dontrun{## simulated data
+library("gamlss2")
+library("mvtnorm")
+
+set.seed(1328)
+rho <- 0.5
+
+## number of observations
+n <- 500
+
+d <- data.frame(
+  "x1" = runif(n, -3, 3),
+  "x2" = runif(n, -3, 3)
+)
+
+mu1 <- sin(d$x1)
+mu2 <- 0.5 * d$x2
+
+alpha1 <- c(-Inf, 0, Inf)
+alpha2 <- c(-Inf, -1, 0, 1, Inf)
+
+Sigma <- matrix(c(1, rho, rho, 1), 2, 2)
+yhelp <- rmvnorm(n, mean = c(0, 0), sigma = Sigma)
+
+y1star <- mu1 + yhelp[, 1]
+y2star <- mu2 + yhelp[, 2]
+
+d$y1 <- cut(y1star, alpha1, labels = FALSE) - 1
+d$y2 <- cut(y2star, alpha2, labels = FALSE) - 1
+
+## new response
+d$Y <- cbind(d$y1, d$y2)
+
+## important, remove intercepts!
+f <- Y ~ -1 + s(x1) | -1 + s(x2)
+
+## estimate model
+b <- gamlss2(f, family = dk4, data = d, eps = .0001)
+
+## plot estimated effects
+plot(b)
+
+## extract estimated parameters
+par <- predict(b, type = "parameter")
+
+## check rho
+head(par$rho)
+
+## compare mu1 and mu2.
+par(mfrow = c(1, 2))
+plot(par$mu1, mu1)
+abline(0, 1)
+plot(par$mu2, mu2)
+abline(0, 1)
+}
+}
+
+\keyword{regression}
+\keyword{models}
+\keyword{distribution}
+

@@ -1,0 +1,10 @@
+import("gamlss2")
+import("mgcv")
+
+export(
+  "dk3",
+  "dk4"
+)
+
+useDynLib(dontknow, .registration = TRUE)
+

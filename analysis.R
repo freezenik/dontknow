@@ -147,7 +147,7 @@ set.seed(1328)
 rho <- 0.5
 
 ## Number of observations.
-n <- 500
+n <- 5000
 
 ## Simulate features with x1 and x5 being signal,
 ## and the rest noise variables
