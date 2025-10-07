@@ -66,7 +66,7 @@ d$Y <- cbind(d$y1, d$y2)
 f <- Y ~ -1 + s(x1) | -1 + s(x2)
 
 ## estimate model
-b <- gamlss2(f, family = dk4, data = d, eps = .0001)
+b <- gamlss2(f, family = dk4, data = d)
 
 ## plot estimated effects
 plot(b)

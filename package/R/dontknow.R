@@ -89,8 +89,18 @@ dk4 <- function(...)
       ## Build the ordinal cut matrix and ensure ordering.
       alpha <- cbind(par$alpha1, t(apply(cbind(par$alpha2, par$alpha3, par$alpha4), 1, inc2cut)))
 
+     useC <- list(...)$C
+     if(is.null(useC))
+       useC <- TRUE
+
+     ll <- if(isTRUE(useC)) {
+       logLik_dontknow_C
+     } else {
+       logLik_dontknow
+     }
+
       ## Evaluate log-likelihood.
-      d <- logLik_dontknow(
+      d <- ll(
         eta1   = par$mu1,
         eta2   = par$mu2,
         rho    = par$rho,
@@ -109,13 +119,12 @@ dk4 <- function(...)
 dk3 <- dk4
 
 ## Fast C version.
-logLik_dontknow_C <- function(eta1, eta2, rho, alpha1, alpha2, y, log = TRUE) {
+logLik_dontknow_C <- function(eta1, eta2, rho, alpha, y, log = TRUE) {
   .Call("logLik_dontknow",
         as.numeric(eta1),
         as.numeric(eta2),
         as.numeric(rho),
-        as.numeric(alpha1),
-        as.numeric(alpha2),
+        as.matrix(alpha),
         as.matrix(y),
         as.logical(log), package = "dontknow")
 }
