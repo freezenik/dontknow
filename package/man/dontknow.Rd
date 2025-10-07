@@ -79,10 +79,18 @@ head(par$rho)
 
 ## compare mu1 and mu2.
 par(mfrow = c(1, 2))
-plot(par$mu1, mu1)
-abline(0, 1)
-plot(par$mu2, mu2)
-abline(0, 1)
+
+plot(d$x1, y1star, pch = 16,
+  col = rgb(0.1, 0.1, 0.1, alpha = 0.1))
+i <- order(d$x1)
+lines(mu1[i] ~ d$x1[i], col = 2, lwd = 2)
+lines(par$mu1[i] ~ d$x1[i], col = 4, lwd = 2)
+
+plot(d$x2, y2star, pch = 16,
+  col = rgb(0.1, 0.1, 0.1, alpha = 0.1))
+i <- order(d$x2)
+lines(mu2[i] ~ d$x2[i], col = 2, lwd = 2)
+lines(par$mu2[i] ~ d$x2[i], col = 4, lwd = 2)
 }
 }
 
