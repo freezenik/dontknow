@@ -1,169 +1,183 @@
-#define USE_FC_LEN_T
-
+// src/logLik_dontknow.c
 #include <R.h>
 #include <Rinternals.h>
 #include <Rmath.h>
 #include <math.h>
 
-/* ---- helpers ---- */
-static inline double clamp(double x, double lo, double hi) {
-  return x < lo ? lo : (x > hi ? hi : x);
-}
-
-/* Deterministic bivariate normal CDF Φ2(h,k;rho) over (-Inf,h]×(-Inf,k] */
-static double bvncdf(double h, double k, double rho)
-{
-  if(rho >= 1.0)  rho =  0.999999999;
-  if(rho <= -1.0) rho = -0.999999999;
-
-  if(!R_FINITE(h)) return (h < 0.0) ? 0.0 : pnorm(k, 0.0, 1.0, 1, 0);
-  if(!R_FINITE(k)) return (k < 0.0) ? 0.0 : pnorm(h, 0.0, 1.0, 1, 0);
-
-  if(fabs(rho) < 1e-12) {
-    return pnorm(h, 0.0, 1.0, 1, 0) * pnorm(k, 0.0, 1.0, 1, 0);
-  }
-
-  /* 5-point Gauss–Legendre nodes/weights on [-1,1] */
-  static const double w[5] = {
-    0.017614007139152118, 0.040601429800386941, 0.062672048334109064,
-    0.083276741576704749, 0.10193011981724044
-  };
-  static const double x[5] = {
-    0.9931285991850949, 0.9639719272779138, 0.9122344282513259,
-    0.8391169718222188, 0.7463319064601508
-  };
-
-  const double h2 = h*h, k2 = k*k;
-  double result;
-
-  if(fabs(rho) < 0.925) {
-    const double asr = asin(rho);
-    double sum = 0.0;
-    for(int i = 0; i < 5; ++i) {
-      for(int s = -1; s <= 1; s += 2) {
-        const double sn = sin(asr * (1.0 + s * x[i]) * 0.5);
-        const double ss = 1.0 - sn*sn;
-        const double ex = exp((2.0*sn*h*k - h2 - k2) / (2.0*ss)) / sqrt(ss);
-        sum += w[i] * ex;
-      }
-    }
-    result = pnorm(h,0,1,1,0) * pnorm(k,0,1,1,0) + (asr * sum) / (2.0 * M_PI);
-  } else {
-    const double rr = 1.0 - rho*rho;
-    const double s  = (rho < 0.0) ? -1.0 : 1.0;
-
-    const double a = (k - s*h) / sqrt(rr);
-    const double lead = (s*h <= k) ? pnorm(a, 0.0, 1.0, 1, 0) : 0.0;
-
-    double sum = 0.0, hk = h*k;
-    for(int i = 0; i < 5; ++i) {
-      for(int sg = -1; sg <= 1; sg += 2) {
-        const double r = (1.0 + sg * x[i]) * 0.5;
-        const double denom = 1.0 - (1.0 - rho*rho) * r;
-        const double ex = exp(-(h2 - 2.0*rho*hk + k2) / (2.0 * denom)) / denom;
-        sum += w[i] * ex;
-      }
-    }
-    result = lead * exp(-0.5*(h2+k2)) / (2.0*M_PI) + s * sum / (2.0*M_PI);
-    result = clamp(result, 0.0, 1.0);
-  }
-  return clamp(result, 0.0, 1.0);
-}
-
-/* .Call interface:
-   logLik_dontknow(eta1, eta2, rho, alpha, y, logOut)
-
-   - eta1, eta2: REAL vectors length n
-   - rho: REAL vector length 1 or n (correlation scale)
-   - alpha: REAL matrix n×m (m>=2), cols: [alpha1 | alpha2..alpha_m], ordered row-wise for cols>=2
-   - y: INT/REAL matrix n×2 (y1∈{0,1}, y2∈{0,..,m-2})
-   - logOut: logical
+/*
+  Bivariate normal CDF Phi2(h, k; rho) using Plackett's integral:
+  Phi2(h,k;rho) = Phi(h) * Phi(k) + ∫_{0}^{rho} f(t) dt,
+  where f(t) = [1/(2π sqrt(1 - t^2))] * exp( -(h^2 - 2 h k t + k^2) / (2(1 - t^2)) ).
+  We evaluate the integral with 20-point Gauss–Legendre on [min(0,rho), max(0,rho)].
+  For rho=0 we return Phi(h)Phi(k). Accurate for |rho|<1 (typical statistical use).
 */
-SEXP logLik_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha, SEXP Y, SEXP LogOut)
+
+static double Phi(double x) {
+  // lower_tail=1 (TRUE), log_p=0 (FALSE)
+  return Rf_pnorm5(x, 0.0, 1.0, 1, 0);
+}
+
+static double phi2_integrand(double h, double k, double t) {
+  double one_minus_t2 = 1.0 - t * t;
+  double denom = 2.0 * one_minus_t2;
+  double quad = (h*h - 2.0*h*k*t + k*k) / denom;
+  double root = sqrt(one_minus_t2);
+  // 1/(2π sqrt(1 - t^2)) * exp( -quad )
+  return exp(-quad) / (2.0 * M_PI * root);
+}
+
+// 20-point Gauss–Legendre nodes and weights on [-1, 1]
+static const double GL20_x[20] = {
+  -0.9931285991850949, -0.9639719272779138, -0.9122344282513259, -0.8391169718222188, -0.7463319064601508,
+  -0.6360536807265150, -0.5108670019508271, -0.3737060887154196, -0.2277858511416451, -0.07652652113349733,
+   0.07652652113349733,  0.2277858511416451,  0.3737060887154196,  0.5108670019508271,  0.6360536807265150,
+   0.7463319064601508,  0.8391169718222188,  0.9122344282513259,  0.9639719272779138,  0.9931285991850949
+};
+
+static const double GL20_w[20] = {
+  0.01761400713915212, 0.04060142980038694, 0.06267204833410906, 0.08327674157670475, 0.1019301198172404,
+  0.1181945319615184,  0.1316886384491766,  0.1420961093183821,  0.1491729864726037,  0.1527533871307259,
+  0.1527533871307259,  0.1491729864726037,  0.1420961093183821,  0.1316886384491766,  0.1181945319615184,
+  0.1019301198172404,  0.08327674157670475, 0.06267204833410906, 0.04060142980038694, 0.01761400713915212
+};
+
+static double Phi2(double h, double k, double rho)
 {
-  if(!isReal(Eta1) || !isReal(Eta2)) error("eta1/eta2 must be real.");
-  if(!isReal(Rho)) error("rho must be real.");
-  if(!isMatrix(Alpha) || !isReal(Alpha)) error("alpha must be real matrix n x m (m>=2).");
-  if(!isMatrix(Y)) error("y must be matrix n x 2.");
+  if (rho == 0.0) return Phi(h) * Phi(k);
 
-  const R_xlen_t n = XLENGTH(Eta1);
-  if(XLENGTH(Eta2) != n) error("eta1 and eta2 must have same length.");
+  // Integrate from a = min(0, rho) to b = max(0, rho)
+  double a = (rho < 0.0) ? rho : 0.0;
+  double b = (rho < 0.0) ? 0.0 : rho;
 
-  SEXP dimA = getAttrib(Alpha, R_DimSymbol);
-  if(TYPEOF(dimA) != INTSXP) error("alpha must have integer dims.");
-  const int nA = INTEGER(dimA)[0];
-  const int mA = INTEGER(dimA)[1];
-  if(nA != (int)n || mA < 2) error("alpha must have dimensions n x m with m>=2.");
+  // Affine map from [-1,1] to [a,b]: t = ((b-a)/2)*x + (a+b)/2
+  double mid = 0.5 * (a + b);
+  double half = 0.5 * (b - a);
+
+  double sum = 0.0;
+  for (int i = 0; i < 20; ++i) {
+    double t = half * GL20_x[i] + mid;
+    sum += GL20_w[i] * phi2_integrand(h, k, t);
+  }
+
+  double integral = half * sum;
+  return Phi(h) * Phi(k) + integral;
+}
+
+/*
+  .Call interface:
+    logLik_dontknow(eta1, eta2, rho, alpha, y, log)
+  Arguments:
+    - eta1: numeric vector (length n)
+    - eta2: numeric vector (length n)
+    - rho:  numeric scalar or vector (recycled to length n)
+    - alpha: numeric matrix n x k (cols: alpha1,...,alphak), with alpha[,-1] already converted to cumulative cuts
+    - y: integer/numeric matrix n x 2 (cols: y1 ∈ {0,1}, y2 ∈ {0,1,...,k-1})
+    - log: logical scalar
+  Returns:
+    - numeric vector length n with log-likelihood contributions if log=TRUE, else probabilities.
+*/
+
+SEXP logLik_dontknow(SEXP ETA1, SEXP ETA2, SEXP RHO, SEXP ALPHA, SEXP Y, SEXP LOGP)
+{
+  if (!isReal(ETA1) || !isReal(ETA2)) error("eta1 and eta2 must be numeric (double).");
+  if (!isReal(RHO)) error("rho must be numeric (double).");
+  if (!isReal(ALPHA) || !isMatrix(ALPHA)) error("alpha must be a numeric matrix.");
+  if ((!isInteger(Y) && !isReal(Y)) || !isMatrix(Y)) error("y must be an integer/numeric matrix with two columns.");
+  if (!isLogical(LOGP) || LENGTH(LOGP) != 1) error("log must be a single logical.");
+
+  R_xlen_t n = XLENGTH(ETA1);
+  if (XLENGTH(ETA2) != n) error("eta1 and eta2 must have the same length.");
+
+  SEXP dimA = getAttrib(ALPHA, R_DimSymbol);
+  if (isNull(dimA) || LENGTH(dimA) != 2) error("alpha must have dimensions.");
+  R_xlen_t nA = (R_xlen_t) INTEGER(dimA)[0];
+  int k = INTEGER(dimA)[1];
+  if (nA != n) error("nrow(alpha) must match length of eta1.");
 
   SEXP dimY = getAttrib(Y, R_DimSymbol);
-  if(TYPEOF(dimY) != INTSXP) error("y must have integer dims.");
-  const int nY = INTEGER(dimY)[0];
-  const int mY = INTEGER(dimY)[1];
-  if(nY != (int)n || mY != 2) error("y must have dimensions n x 2.");
+  if (isNull(dimY) || LENGTH(dimY) != 2) error("y must have dimensions.");
+  R_xlen_t nY = (R_xlen_t) INTEGER(dimY)[0];
+  int cy = INTEGER(dimY)[1];
+  if (nY != n || cy != 2) error("y must be an n x 2 matrix.");
 
-  const double *eta1 = REAL(Eta1);
-  const double *eta2 = REAL(Eta2);
-  const double *rhoV = REAL(Rho);
-  const double *A    = REAL(Alpha);   /* col-major: A[i + j*n] */
-  const double *Yp   = REAL(Y);
+  const double *eta1 = REAL(ETA1);
+  const double *eta2 = REAL(ETA2);
+  const double *rho  = REAL(RHO);
+  const double *alpha = REAL(ALPHA);
 
-  const int rho_scalar = (XLENGTH(Rho) == 1);
-  int log_out = asLogical(LogOut);
-  if(log_out == NA_LOGICAL) log_out = 1;
+  // y can be integer or real — access via REAL coercion when needed
+  int y_is_int = isInteger(Y);
+  const int   *yI = y_is_int ? INTEGER(Y) : NULL;
+  const double*yR = y_is_int ? NULL : REAL(Y);
 
-  /* number of ordinal levels in Y2 */
-  const int K = mA - 1;         /* categories for Y2 are 0..K-1 */
+  int logp = LOGICAL(LOGP)[0];
 
-  SEXP out = PROTECT(allocVector(REALSXP, n));
-  double *ll = REAL(out);
+  SEXP ans = PROTECT(allocVector(REALSXP, n));
+  double *out = REAL(ans);
 
-  for(R_xlen_t i = 0; i < n; ++i) {
-    const double a1 = A[i + 0*n];      /* binary cut alpha1(i) */
+  for (R_xlen_t i = 0; i < n; ++i) {
+    // Observed (y1, y2)
+    int y1 = y_is_int ? (int) yI[i] : (int) floor(yR[i] + 0.5);                 // column 1
+    int y2 = y_is_int ? (int) yI[i + n] : (int) floor(yR[i + n] + 0.5);         // column 2
 
-    const int y1 = (int) Yp[i + 0*n];
-    int y2       = (int) Yp[i + 1*n];
+    // Correlation (recycle if needed)
+    double r = REAL(RHO)[ (XLENGTH(RHO) == 1) ? 0 : i ];
+    if (r <= -0.999999) r = -0.999999;
+    if (r >=  0.999999) r =  0.999999;
 
-    /* basic checks on y1/y2 */
-    if(y1 != 0 && y1 != 1) {
-      error("y1 must be 0 or 1 at row %lld.", (long long)(i+1));
-    }
-    if(y2 < 0 || y2 >= K) {
-      error("y2 out of range [0,%d] at row %lld.", K-1, (long long)(i+1));
-    }
+    // alpha row i: alpha[i, 0..k-1]
+    const double *ai = alpha + i + 0 * n; // start of col 0, row i
+    // helper to index alpha[i, j] = alpha[i + j*n]
+    #define A(j) (*(ai + (size_t)(j) * (size_t)n))
 
-    double r = rho_scalar ? rhoV[0] : rhoV[i];
-    r = clamp(r, -0.999999, 0.999999);
+    double A1 = A(0);                       // alpha1
+    double H  = A1 - eta1[i];               // A = alpha1 - eta1
 
-    if(y1 == 1) {
-      /* P(Y1=1) = 1 - Phi(alpha1 - eta1) */
-      const double z = a1 - eta1[i];
-      double p = pnorm(z, 0.0, 1.0, 0, 0);
-      if(p < 0.0) p = 0.0;
-      ll[i] = log_out ? ((p > 0.0) ? log(p) : R_NegInf) : p;
+    if (y1 == 1) {
+      // P(Y1=1) = 1 - Phi(alpha1 - eta1)
+      double val = Rf_pnorm5(H, 0.0, 1.0, 0, logp); // lower_tail=FALSE
+      out[i] = val;
     } else {
-      /* y1==0: rectangle on (Z1, Z2) */
-      const double Aup = a1 - eta1[i];
+      // y1 == 0: rectangle probability difference on (Z1, Z2)
+      // Build implicit alpha2 with -Inf and +Inf around alpha[,-1]
+      // alpha2 indices: 0 -> -Inf, 1..(k-1) -> alpha[,1..k-1], k -> +Inf
+      int c_lo = y2 + 1;     // index in alpha2 for lower bound
+      int c_up = y2 + 2;     // index in alpha2 for upper bound
 
-      /* Build lower/upper bounds for Z2 based on y2 category */
-      double Bl, Bu;
-      if(y2 == 0) {
-        Bl = R_NegInf;
-        Bu = A[i + 1*n] - eta2[i];                 /* alpha2 */
-      } else if(y2 == K-1) {
-        Bl = A[i + (K)*n] - eta2[i];               /* alpha_{K+1} column index = K */
-        Bu = R_PosInf;
+      double B1, B2;
+      if (c_lo == 0) {
+        B1 = R_NegInf;
       } else {
-        Bl = A[i + (y2+1)*n] - eta2[i];            /* alpha_{y2+1} */
-        Bu = A[i + (y2+2)*n] - eta2[i];            /* alpha_{y2+2} */
+        // alpha[, c_lo] corresponds to alpha column (c_lo) in 1-based,
+        // i.e., A(c_lo-1) in 0-based since alpha[,-1] shifted by one.
+        B1 = A(c_lo - 1);
+      }
+      if (c_up >= k + 1) {
+        B2 = R_PosInf;
+      } else {
+        B2 = A(c_up - 1);
       }
 
-      double p = bvncdf(Aup, Bu, r) - bvncdf(Aup, Bl, r);
-      if(p < 0.0) p = 0.0;                        /* guard tiny negatives */
-      ll[i] = log_out ? ((p > 0.0) ? log(p) : R_NegInf) : p;
+      // Shift by eta2
+      B1 -= eta2[i];
+      B2 -= eta2[i];
+
+      // Evaluate P = Phi2(H, B2; r) - Phi2(H, B1; r)
+      double pup = Phi2(H, B2, r);
+      double plo = Phi2(H, B1, r);
+      double p = pup - plo;
+
+      if (logp) {
+        // Guard tiny numerical negatives
+        out[i] = (p > 0.0) ? log(p) : R_NegInf;
+      } else {
+        out[i] = (p > 0.0) ? p : 0.0;
+      }
     }
+    #undef A
   }
 
   UNPROTECT(1);
-  return out;
+  return ans;
 }
 

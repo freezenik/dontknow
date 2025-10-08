@@ -66,8 +66,8 @@ d$Y <- cbind(d$y1, d$y2)
 ## important, remove intercepts!
 f <- Y ~ -1 + s(x1) | -1 + s(x2)
 
-## estimate model
-b <- gamlss2(f, family = DK, data = d)
+## estimate model, y2 with k = 4 levels
+b <- gamlss2(f, family = DK(k = 4), data = d)
 
 ## plot estimated effects
 plot(b)
