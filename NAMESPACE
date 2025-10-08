@@ -1,6 +1,8 @@
 import("gamlss2")
 import("mgcv")
 
+importFrom("stats", "pnorm")
+
 export(
   "DK"
 )

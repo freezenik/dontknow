@@ -55,11 +55,11 @@ logLik_dontknow <- function(eta1, eta2, rho, alpha, y, log = TRUE)
       ## First dimension upper bound is always alpha1[i] - eta1[i].
       A  <- alpha[i, 1] - eta1[i]
 
-      ## Second dimension bounds depend on observed y2 in {0,1,2,3}.
+      ## Second dimension bounds depend on observed y2 in {0,1,2,3,...}.
       B2 <- alpha2[y2[i] + 2L] - eta2[i] ## upper: alpha_{2, c} - eta2  (c = y2[i]+1)
       B1 <- alpha2[y2[i] + 1L] - eta2[i] ## lower: alpha_{2, c-1} - eta2
 
-      ## Φ2(A, B2; ρ) - Φ2(A, B1; ρ)
+      ## P(A, B2; ρ) - P(A, B1; ρ)
       p_up <- mvtnorm::pmvnorm(lower = c(-Inf, -Inf), upper = c(A, B2),
                                mean = c(0, 0), sigma = Sigma, keepAttr = FALSE)
       p_lo <- mvtnorm::pmvnorm(lower = c(-Inf, -Inf), upper = c(A, B1),
@@ -80,9 +80,10 @@ logLik_dontknow <- function(eta1, eta2, rho, alpha, y, log = TRUE)
 ## Don't-know family: explicit thresholds as parameters.
 DK <- function(k = 4, useC = TRUE)
 {
-  names <- c("mu1", "mu2", "rho", "alpha1")
-  names <- c(names, paste0("alpha", 2:k))
-  links <- c("identity", "identity", "rhogit", rep("identity", k))
+  ## Parameter names in a guaranteed order.
+  alpha_names <- c("alpha1", paste0("alpha", 2:k))
+  names <- c("mu1", "mu2", "rho", alpha_names)
+  links <- c("identity", "identity", "rhogit", rep("identity", length(alpha_names)))
 
   f <- list(
     family = "DK",
@@ -90,15 +91,23 @@ DK <- function(k = 4, useC = TRUE)
     names  = names,
     links  = links,
     d = function(y, par, log = FALSE) {
-      ## Build the ordinal cut matrix and ensure ordering.
-      alpha <- do.call("cbind", par[grep("alpha", names(par))])
-      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
+      ## ensure y2 in {0,1,...,K-1}
+      y2min <- min(y[, 2L], na.rm = TRUE)
+      if(y2min != 0L) {
+        y[, 2L] <- y[, 2L] - y2min
+      }
 
-     ll <- if(isTRUE(useC)) {
-       logLik_dontknow_C
-     } else {
-       logLik_dontknow
-     }
+      ## Build the ordinal cut matrix and ensure ordering.
+      alpha <- par[alpha_names]
+      if(k > 2L) {
+        alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
+      }
+
+      ll <- if(isTRUE(useC)) {
+        logLik_dontknow_C
+      } else {
+        logLik_dontknow
+      }
 
       ## Evaluate log-likelihood.
       d <- ll(
