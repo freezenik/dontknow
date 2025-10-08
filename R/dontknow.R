@@ -98,7 +98,7 @@ DK <- function(k = 4, useC = TRUE)
       }
 
       ## Build the ordinal cut matrix and ensure ordering.
-      alpha <- par[alpha_names]
+      alpha <- do.call("cbind", par[alpha_names])
       if(k > 2L) {
         alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
       }
