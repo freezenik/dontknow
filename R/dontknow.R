@@ -35,7 +35,6 @@ logLik_dontknow <- function(eta1, eta2, rho, alpha, y, log = TRUE)
   n  <- length(y1)
 
   ll <- numeric(n)
-  rho <- rep(rho, length.out = n)
 
   for(i in seq_len(n)) {
     ## Correlation matrix for this obs.

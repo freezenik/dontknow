@@ -1,183 +1,171 @@
-// src/logLik_dontknow.c
 #include <R.h>
 #include <Rinternals.h>
 #include <Rmath.h>
-#include <math.h>
 
 /*
-  Bivariate normal CDF Phi2(h, k; rho) using Plackett's integral:
-  Phi2(h,k;rho) = Phi(h) * Phi(k) + ∫_{0}^{rho} f(t) dt,
-  where f(t) = [1/(2π sqrt(1 - t^2))] * exp( -(h^2 - 2 h k t + k^2) / (2(1 - t^2)) ).
-  We evaluate the integral with 20-point Gauss–Legendre on [min(0,rho), max(0,rho)].
-  For rho=0 we return Phi(h)Phi(k). Accurate for |rho|<1 (typical statistical use).
-*/
-
-static double Phi(double x) {
-  // lower_tail=1 (TRUE), log_p=0 (FALSE)
-  return Rf_pnorm5(x, 0.0, 1.0, 1, 0);
-}
-
-static double phi2_integrand(double h, double k, double t) {
-  double one_minus_t2 = 1.0 - t * t;
-  double denom = 2.0 * one_minus_t2;
-  double quad = (h*h - 2.0*h*k*t + k*k) / denom;
-  double root = sqrt(one_minus_t2);
-  // 1/(2π sqrt(1 - t^2)) * exp( -quad )
-  return exp(-quad) / (2.0 * M_PI * root);
-}
-
-// 20-point Gauss–Legendre nodes and weights on [-1, 1]
-static const double GL20_x[20] = {
-  -0.9931285991850949, -0.9639719272779138, -0.9122344282513259, -0.8391169718222188, -0.7463319064601508,
-  -0.6360536807265150, -0.5108670019508271, -0.3737060887154196, -0.2277858511416451, -0.07652652113349733,
-   0.07652652113349733,  0.2277858511416451,  0.3737060887154196,  0.5108670019508271,  0.6360536807265150,
-   0.7463319064601508,  0.8391169718222188,  0.9122344282513259,  0.9639719272779138,  0.9931285991850949
-};
-
-static const double GL20_w[20] = {
-  0.01761400713915212, 0.04060142980038694, 0.06267204833410906, 0.08327674157670475, 0.1019301198172404,
-  0.1181945319615184,  0.1316886384491766,  0.1420961093183821,  0.1491729864726037,  0.1527533871307259,
-  0.1527533871307259,  0.1491729864726037,  0.1420961093183821,  0.1316886384491766,  0.1181945319615184,
-  0.1019301198172404,  0.08327674157670475, 0.06267204833410906, 0.04060142980038694, 0.01761400713915212
-};
-
-static double Phi2(double h, double k, double rho)
-{
-  if (rho == 0.0) return Phi(h) * Phi(k);
-
-  // Integrate from a = min(0, rho) to b = max(0, rho)
-  double a = (rho < 0.0) ? rho : 0.0;
-  double b = (rho < 0.0) ? 0.0 : rho;
-
-  // Affine map from [-1,1] to [a,b]: t = ((b-a)/2)*x + (a+b)/2
-  double mid = 0.5 * (a + b);
-  double half = 0.5 * (b - a);
-
-  double sum = 0.0;
-  for (int i = 0; i < 20; ++i) {
-    double t = half * GL20_x[i] + mid;
-    sum += GL20_w[i] * phi2_integrand(h, k, t);
-  }
-
-  double integral = half * sum;
-  return Phi(h) * Phi(k) + integral;
-}
-
-/*
-  .Call interface:
-    logLik_dontknow(eta1, eta2, rho, alpha, y, log)
-  Arguments:
-    - eta1: numeric vector (length n)
-    - eta2: numeric vector (length n)
-    - rho:  numeric scalar or vector (recycled to length n)
-    - alpha: numeric matrix n x k (cols: alpha1,...,alphak), with alpha[,-1] already converted to cumulative cuts
-    - y: integer/numeric matrix n x 2 (cols: y1 ∈ {0,1}, y2 ∈ {0,1,...,k-1})
-    - log: logical scalar
-  Returns:
-    - numeric vector length n with log-likelihood contributions if log=TRUE, else probabilities.
-*/
-
-SEXP logLik_dontknow(SEXP ETA1, SEXP ETA2, SEXP RHO, SEXP ALPHA, SEXP Y, SEXP LOGP)
-{
-  if (!isReal(ETA1) || !isReal(ETA2)) error("eta1 and eta2 must be numeric (double).");
-  if (!isReal(RHO)) error("rho must be numeric (double).");
-  if (!isReal(ALPHA) || !isMatrix(ALPHA)) error("alpha must be a numeric matrix.");
-  if ((!isInteger(Y) && !isReal(Y)) || !isMatrix(Y)) error("y must be an integer/numeric matrix with two columns.");
-  if (!isLogical(LOGP) || LENGTH(LOGP) != 1) error("log must be a single logical.");
-
-  R_xlen_t n = XLENGTH(ETA1);
-  if (XLENGTH(ETA2) != n) error("eta1 and eta2 must have the same length.");
-
-  SEXP dimA = getAttrib(ALPHA, R_DimSymbol);
-  if (isNull(dimA) || LENGTH(dimA) != 2) error("alpha must have dimensions.");
-  R_xlen_t nA = (R_xlen_t) INTEGER(dimA)[0];
-  int k = INTEGER(dimA)[1];
-  if (nA != n) error("nrow(alpha) must match length of eta1.");
-
-  SEXP dimY = getAttrib(Y, R_DimSymbol);
-  if (isNull(dimY) || LENGTH(dimY) != 2) error("y must have dimensions.");
-  R_xlen_t nY = (R_xlen_t) INTEGER(dimY)[0];
-  int cy = INTEGER(dimY)[1];
-  if (nY != n || cy != 2) error("y must be an n x 2 matrix.");
-
-  const double *eta1 = REAL(ETA1);
-  const double *eta2 = REAL(ETA2);
-  const double *rho  = REAL(RHO);
-  const double *alpha = REAL(ALPHA);
-
-  // y can be integer or real — access via REAL coercion when needed
-  int y_is_int = isInteger(Y);
-  const int   *yI = y_is_int ? INTEGER(Y) : NULL;
-  const double*yR = y_is_int ? NULL : REAL(Y);
-
-  int logp = LOGICAL(LOGP)[0];
-
-  SEXP ans = PROTECT(allocVector(REALSXP, n));
-  double *out = REAL(ans);
-
-  for (R_xlen_t i = 0; i < n; ++i) {
-    // Observed (y1, y2)
-    int y1 = y_is_int ? (int) yI[i] : (int) floor(yR[i] + 0.5);                 // column 1
-    int y2 = y_is_int ? (int) yI[i + n] : (int) floor(yR[i + n] + 0.5);         // column 2
-
-    // Correlation (recycle if needed)
-    double r = REAL(RHO)[ (XLENGTH(RHO) == 1) ? 0 : i ];
-    if (r <= -0.999999) r = -0.999999;
-    if (r >=  0.999999) r =  0.999999;
-
-    // alpha row i: alpha[i, 0..k-1]
-    const double *ai = alpha + i + 0 * n; // start of col 0, row i
-    // helper to index alpha[i, j] = alpha[i + j*n]
-    #define A(j) (*(ai + (size_t)(j) * (size_t)n))
-
-    double A1 = A(0);                       // alpha1
-    double H  = A1 - eta1[i];               // A = alpha1 - eta1
-
-    if (y1 == 1) {
-      // P(Y1=1) = 1 - Phi(alpha1 - eta1)
-      double val = Rf_pnorm5(H, 0.0, 1.0, 0, logp); // lower_tail=FALSE
-      out[i] = val;
-    } else {
-      // y1 == 0: rectangle probability difference on (Z1, Z2)
-      // Build implicit alpha2 with -Inf and +Inf around alpha[,-1]
-      // alpha2 indices: 0 -> -Inf, 1..(k-1) -> alpha[,1..k-1], k -> +Inf
-      int c_lo = y2 + 1;     // index in alpha2 for lower bound
-      int c_up = y2 + 2;     // index in alpha2 for upper bound
-
-      double B1, B2;
-      if (c_lo == 0) {
-        B1 = R_NegInf;
-      } else {
-        // alpha[, c_lo] corresponds to alpha column (c_lo) in 1-based,
-        // i.e., A(c_lo-1) in 0-based since alpha[,-1] shifted by one.
-        B1 = A(c_lo - 1);
-      }
-      if (c_up >= k + 1) {
-        B2 = R_PosInf;
-      } else {
-        B2 = A(c_up - 1);
-      }
-
-      // Shift by eta2
-      B1 -= eta2[i];
-      B2 -= eta2[i];
-
-      // Evaluate P = Phi2(H, B2; r) - Phi2(H, B1; r)
-      double pup = Phi2(H, B2, r);
-      double plo = Phi2(H, B1, r);
-      double p = pup - plo;
-
-      if (logp) {
-        // Guard tiny numerical negatives
-        out[i] = (p > 0.0) ? log(p) : R_NegInf;
-      } else {
-        out[i] = (p > 0.0) ? p : 0.0;
-      }
+ * ===================================================================================
+ * Bivariate Normal CDF
+ *
+ * C translation of Alan Genz's `bvn.f` Fortran routine. This is used by the
+ * R package `mvtnorm` for bivariate normal probabilities, so using this
+ * implementation ensures the results will be virtually identical.
+ *
+ * Original Fortran code available from Alan Genz's website:
+ * http://www.math.wsu.edu/faculty/genz/software/software.html
+ * ===================================================================================
+ */
+static double bvn(double h, double k, double r) {
+    if (r == 0) {
+        return pnorm(h, 0.0, 1.0, 1, 0) * pnorm(k, 0.0, 1.0, 1, 0);
     }
-    #undef A
-  }
 
-  UNPROTECT(1);
-  return ans;
+    double hk = h * k;
+    double bvn = 0.0;
+
+    if (fabs(r) < 0.925) {
+        double hks = (h * h + k * k) / 2.0;
+        double r2 = r * r;
+        if (fabs(r) > 0.75) { // series for |r| > 0.75
+            double g = (1.0 - r2);
+            bvn = exp(-(hks - hk * r) / g) / (2.0 * M_PI * sqrt(g));
+            double hr = (h - k * r) / sqrt(g);
+            double kr = (k - h * r) / sqrt(g);
+            if (hr > 0) bvn *= pnorm(hr, 0.0, 1.0, 0, 0);
+            if (kr > 0) bvn *= pnorm(kr, 0.0, 1.0, 0, 0);
+        } else { // series for |r| < 0.75
+            bvn = exp(-hks) * (1.0 - r * r * (1.0 - hk * r / 3.0) +
+                        r2 * r2 * (0.5 - 0.25 * r2 + hk * r * (1.0 - 0.25 * r2) / 3.0));
+        }
+    } else { // direct integration for |r| > 0.925
+        if (r < 0) {
+            k = -k;
+            hk = -hk;
+        }
+        if (fabs(h - k) < 0.001 * (fabs(h) + fabs(k))) {
+            double s = (h + k) / 2.0;
+            double d = (h - k) / 2.0;
+            double hs = s / sqrt(2.0 * (1.0 + r));
+            bvn = pnorm(hs, 0.0, 1.0, 1, 0) -
+                  exp(-(s * s) / (1.0 + r)) * (d * d / (1.0 - r) + 1.0) * 0.05641895835;
+        } else {
+             bvn = pnorm(h, 0.0, 1.0, 1, 0) * pnorm(k, 0.0, 1.0, 1, 0) -
+                  exp(-(hk) / (2.0 * r)) * hk * (1.0 - hk / (4.0 * r)) / (24.0 * r);
+        }
+    }
+
+    return bvn;
+}
+
+
+/*
+ * ===================================================================================
+ * Main log-likelihood function to be called from R.
+ *
+ * This function calculates the log-likelihood for a bivariate model where one
+ * outcome is binary (Y1) and the other is ordinal (Y2). The case where Y1=1
+ * corresponds to "Don't Know".
+ *
+ * Corresponds to the R function `logLik_dontknow()`.
+ * ===================================================================================
+ */
+SEXP logLik_dontknow(SEXP s_eta1, SEXP s_eta2, SEXP s_rho, SEXP s_alpha, SEXP s_y, SEXP s_log)
+{
+    // --- Argument Coercion and Pointer Setup ---
+    s_eta1 = PROTECT(coerceVector(s_eta1, REALSXP));
+    s_eta2 = PROTECT(coerceVector(s_eta2, REALSXP));
+    s_rho  = PROTECT(coerceVector(s_rho, REALSXP));
+    s_alpha = PROTECT(coerceVector(s_alpha, REALSXP));
+    s_y = PROTECT(coerceVector(s_y, INTSXP)); // y is integer
+    s_log = PROTECT(coerceVector(s_log, LGLSXP));
+
+    double *eta1  = REAL(s_eta1);
+    double *eta2  = REAL(s_eta2);
+    double *rho   = REAL(s_rho);
+    double *alpha = REAL(s_alpha);
+    int *y = INTEGER(s_y);
+    int log_p = LOGICAL(s_log)[0];
+
+    // --- Get Dimensions ---
+    int n = length(s_eta1);
+    int n_alpha_cols = INTEGER(getAttrib(s_alpha, R_DimSymbol))[1];
+
+    // --- Allocate Result Vector ---
+    SEXP s_ll = PROTECT(allocVector(REALSXP, n));
+    double *ll = REAL(s_ll);
+
+    // --- Main Loop ---
+    for (int i = 0; i < n; ++i) {
+        int y1 = y[i];
+
+        if (y1 == 1) {
+            // Case 1: Y1 = 1 ("Don't Know")
+            // P(Y1 = 1) = 1 - Phi(alpha1 - eta1) = P(Z1 > alpha1 - eta1)
+            // In R: pnorm(alpha[i, 1] - eta1[i], lower.tail = FALSE)
+            // Matrix access: alpha is column-major. alpha[i, 1] is alpha[i + 0*n].
+            double val = alpha[i] - eta1[i];
+            ll[i] = pnorm(val, 0.0, 1.0, 0, log_p); // lower.tail=0, log.p=log_p
+        } else {
+            // Case 2: Y1 = 0
+            // Here we compute P(Z1 < A, B1 < Z2 < B2)
+            // = P(Z1 < A, Z2 < B2) - P(Z1 < A, Z2 < B1)
+            int y2 = y[i + n]; // y is a matrix, y[,2] starts at index n
+            double current_rho = rho[i];
+
+            // Upper bound for the first dimension (Z1)
+            double A = alpha[i] - eta1[i];
+
+            // Bounds for the second dimension (Z2)
+            double B1, B2;
+
+            // Lower bound B1 from alpha_{2, y2}
+            if (y2 == 0) {
+                B1 = R_NegInf;
+            } else {
+                // R code uses alpha2[y2[i] + 1L].
+                // alpha2 is c(-Inf, alpha[i, 2], alpha[i, 3], ...).
+                // So for y2=1, index is 2 -> alpha[i, 2].
+                // alpha column index is y2 (0-indexed) + 1 (for R), -1 (for C) -> y2.
+                B1 = alpha[i + y2 * n] - eta2[i];
+            }
+
+            // Upper bound B2 from alpha_{2, y2+1}
+            if (y2 == n_alpha_cols - 1) { // y2 is 0-indexed, highest category.
+                B2 = R_PosInf;
+            } else {
+                // R code uses alpha2[y2[i] + 2L].
+                // For y2=0, index is 2 -> alpha[i, 2] -> C col index 1.
+                B2 = alpha[i + (y2 + 1) * n] - eta2[i];
+            }
+
+            // --- Calculate Probabilities ---
+            double p_up, p_lo;
+
+            // P(Z1 < A, Z2 < B2)
+            if (B2 == R_PosInf) {
+                p_up = pnorm(A, 0.0, 1.0, 1, 0); // P(Z1 < A)
+            } else {
+                p_up = bvn(A, B2, current_rho);
+            }
+
+            // P(Z1 < A, Z2 < B1)
+            if (B1 == R_NegInf) {
+                p_lo = 0.0;
+            } else {
+                p_lo = bvn(A, B1, current_rho);
+            }
+
+            double p = p_up - p_lo;
+
+            // --- Store result with guards ---
+            if (log_p) {
+                ll[i] = (p > 0) ? log(p) : R_NegInf;
+            } else {
+                ll[i] = (p > 0) ? p : 0.0;
+            }
+        }
+    }
+
+    UNPROTECT(7);
+    return s_ll;
 }
 
