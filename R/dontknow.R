@@ -1,22 +1,4 @@
 ## Helper functions.
-invrhogit <- function(eta)
-{
-  return(eta / sqrt(1 + eta^2))
-}
-
-rhogit <- function(mu)
-{
-  return(mu / sqrt(1 - mu^2))
-}
-
-cut2inc <- function(x)
-{
-  if(length(x) > 1) {
-    x[-1L] <- log(diff(x))
-  }
-  return(x)  
-}
-
 inc2cut <- function(x)
 {
   if(length(x) > 1L) {
@@ -134,5 +116,9 @@ logLik_dontknow_C <- function(eta1, eta2, rho, alpha, y, log = TRUE) {
         as.matrix(alpha),
         as.matrix(y),
         as.logical(log), package = "dontknow")
+}
+
+pbvnorm_miwa <- function(h, k, rho, steps = 128L) {
+  .Call("pbvnorm_miwa", as.numeric(h), as.numeric(k), as.numeric(rho), as.integer(steps))
 }
 
