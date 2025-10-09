@@ -27,7 +27,7 @@ DK(k = 4, useC = TRUE)
 }
 
 \seealso{
-  \code{\link{gamlss2}}, \code{\link{gamlss2.family}}, \code{\link[MASS]{polr}}
+  \code{\link{gamlss2}}, \code{\link{gamlss2.family}}
 }
 
 \examples{\dontrun{## simulated data
