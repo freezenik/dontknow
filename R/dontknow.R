@@ -107,7 +107,7 @@ DK <- function(k = 4, useC = TRUE)
   f$valid.response <- function(x) {
     if(is.factor(x) | is.character(x)) 
       stop("the response should be integer/numeric!")
-    if(!all(table(x[, 1L]) %in% c(0, 1)))
+    if(!all(range(x[, 1L]) %in% c(0, 1)))
       stop("response y1 must be 0/1!")
     if(min(x[, 2L]) != 0)
       stop("response y2 must be 0, 1, 2, 3, ...!")
