@@ -40,7 +40,7 @@ logLik_dontknow <- function(eta1, eta2, rho, alpha, y, log = TRUE)
       B2 <- alpha2[y2[i] + 2L] - eta2[i] ## upper: alpha_{2, c} - eta2  (c = y2[i]+1)
       B1 <- alpha2[y2[i] + 1L] - eta2[i] ## lower: alpha_{2, c-1} - eta2
 
-      ## P(A, B2; ρ) - P(A, B1; ρ)
+      ## Prob(A, B2; rho) - Prob(A, B1; rho)
       p_up <- mvtnorm::pmvnorm(lower = c(-Inf, -Inf), upper = c(A, B2),
                                mean = c(0, 0), sigma = Sigma, keepAttr = FALSE)
       p_lo <- mvtnorm::pmvnorm(lower = c(-Inf, -Inf), upper = c(A, B1),
