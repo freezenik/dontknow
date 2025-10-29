@@ -113,6 +113,17 @@ inc2cut <- function(x)
 
 alpha <- t(apply(par[, 5:7], 1, inc2cut))
 head(alpha)
+
+## Plot ystars.
+probs <- family(b)$probabilities(par)
+col_fit <- apply(probs, 1, which.max)
+col_truth <- d$y2 + 1L
+col_truth[d$y1 == 1L] <- 5L
+
+par(mfrow = c(1, 2))
+plot(y2star ~ y1star, data = d, col = col_fit, main = "Estimate")
+abline(h = alpha, lty = 2, col = "lightgray")
+plot(y2star ~ y1star, data = d, col = col_truth, main = "Truth")
 }
 }
 

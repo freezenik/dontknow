@@ -67,11 +67,11 @@ DK <- function(k = 4, useC = TRUE)
   links <- c("identity", "identity", "rhogit", rep("identity", length(alpha_names)))
 
   f <- list(
-    family = "DK",
+    "family" = "DK",
     ## Parameterization: alpha1 is the binary cut; alpha2 ... alphak are the ordinal cuts.
-    names  = names,
-    links  = links,
-    d = function(y, par, log = FALSE) {
+    "names"  = names,
+    "links"  = links,
+    "pdf" = function(y, par, log = FALSE) {
       ## ensure y2 in {0,1,...,K-1}
       y2min <- min(y[, 2L], na.rm = TRUE)
       if(y2min != 0L) {
@@ -104,6 +104,39 @@ DK <- function(k = 4, useC = TRUE)
     }
   )
 
+  f$cdf <- function(y, par, lower.tail = TRUE, log.p = FALSE, ...) {
+    n <- length(par$mu1)
+
+    alpha <- do.call("cbind", par[alpha_names])
+    if(k > 2L)
+      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
+
+    probs <- cdf_dontknow_R(par$mu1, par$mu2, par$rho, alpha)
+
+    ## probs: n x (K+1), col1=dk, col(c+2)=category c
+    ## build cumulative along that order:
+    cprobs <- t(apply(probs, 1L, cumsum))  ## n x (K+1)
+
+    ## coerce
+    if(length(y) == 1L)
+      y <- rep.int(y, n)
+    y <- as.integer(y)
+    if(any(y < 0L | y > (k-1L))) stop("y must be in 0..", k-1L)
+
+    ans <- cprobs[cbind(seq_len(n), y + 1L)]
+
+    if(!lower.tail)
+      ans <- 1 - ans + probs[cbind(seq_len(n), y + 1L)]
+    if(log.p)
+      ans <- log(ans)
+
+    ans
+  }
+
+  f$probabilities <- function(par) {
+    cdf_dontknow(par)
+  }
+
   f$valid.response <- function(x) {
     if(is.factor(x) | is.character(x)) 
       stop("the response should be integer/numeric!")
@@ -131,5 +164,60 @@ logLik_dontknow_C <- function(eta1, eta2, rho, alpha, y, log = TRUE) {
 
 pbvnorm_miwa <- function(h, k, rho, steps = 128L) {
   .Call("pbvnorm_miwa", as.numeric(h), as.numeric(k), as.numeric(rho), as.integer(steps))
+}
+
+## CDF function.
+cdf_dontknow <- function(par)
+{
+  eta1 <- par$mu1
+  eta2 <- par$mu2
+  rho <- par$rho
+  alpha <- as.matrix(par[, grep("alpha", names(par))])
+
+  stopifnot(requireNamespace("mvtnorm"))
+  n <- length(eta1)
+  K <- ncol(alpha) - 1L
+  out <- matrix(NA_real_, n, K + 1L)
+
+  for(i in seq_len(n)) {
+    r <- rho[if (length(rho) == 1L) 1L else i]
+    r <- max(min(r,  0.999999999), -0.999999999)
+
+    Aup <- alpha[i, 1L] - eta1[i]
+    out[i, 1L] <- pnorm(Aup, lower.tail = FALSE)
+
+    for(c in 0:(K-1L)) {
+      B1 <- if (c == 0L) -Inf else alpha[i, c+1L] - eta2[i]
+      B2 <- if (c+1L >= K)  Inf else alpha[i, c+2L] - eta2[i]
+
+      Sigma <- matrix(c(1, r, r, 1), 2, 2)
+
+      p_up <- if (is.infinite(B2) && B2 > 0) {
+        pnorm(Aup)
+      } else {
+        as.numeric(mvtnorm::pmvnorm(
+          lower = c(-Inf, -Inf),
+          upper = c(Aup, B2),
+          mean  = c(0, 0),
+          sigma = Sigma,
+          keepAttr = FALSE
+        ))
+      }
+      p_lo <- if (is.infinite(B1) && B1 < 0) {
+        0
+      } else {
+        as.numeric(mvtnorm::pmvnorm(
+          lower = c(-Inf, -Inf),
+          upper = c(Aup, B1),
+          mean  = c(0, 0),
+          sigma = Sigma,
+          keepAttr = FALSE
+        ))
+      }
+      pc <- p_up - p_lo
+      out[i, c + 2L] <- if (pc > 0) pc else 0
+    }
+  }
+  out
 }
 
