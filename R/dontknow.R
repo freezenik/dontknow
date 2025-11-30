@@ -180,19 +180,19 @@ cdf_dontknow <- function(par)
   out <- matrix(NA_real_, n, K + 1L)
 
   for(i in seq_len(n)) {
-    r <- rho[if (length(rho) == 1L) 1L else i]
+    r <- rho[if(length(rho) == 1L) 1L else i]
     r <- max(min(r,  0.999999999), -0.999999999)
 
     Aup <- alpha[i, 1L] - eta1[i]
     out[i, 1L] <- pnorm(Aup, lower.tail = FALSE)
 
     for(c in 0:(K-1L)) {
-      B1 <- if (c == 0L) -Inf else alpha[i, c+1L] - eta2[i]
-      B2 <- if (c+1L >= K)  Inf else alpha[i, c+2L] - eta2[i]
+      B1 <- if(c == 0L) -Inf else alpha[i, c+1L] - eta2[i]
+      B2 <- if(c+1L >= K)  Inf else alpha[i, c+2L] - eta2[i]
 
       Sigma <- matrix(c(1, r, r, 1), 2, 2)
 
-      p_up <- if (is.infinite(B2) && B2 > 0) {
+      p_up <- if(is.infinite(B2) && B2 > 0) {
         pnorm(Aup)
       } else {
         as.numeric(mvtnorm::pmvnorm(
@@ -203,7 +203,7 @@ cdf_dontknow <- function(par)
           keepAttr = FALSE
         ))
       }
-      p_lo <- if (is.infinite(B1) && B1 < 0) {
+      p_lo <- if(is.infinite(B1) && B1 < 0) {
         0
       } else {
         as.numeric(mvtnorm::pmvnorm(
@@ -215,7 +215,7 @@ cdf_dontknow <- function(par)
         ))
       }
       pc <- p_up - p_lo
-      out[i, c + 2L] <- if (pc > 0) pc else 0
+      out[i, c + 2L] <- if(pc > 0) pc else 0
     }
   }
   out
