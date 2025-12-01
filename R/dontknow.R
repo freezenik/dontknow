@@ -191,7 +191,7 @@ DK <- function(k = 4, useC = TRUE)
     return(TRUE)
   }
 
-  ## Derivatives for rho via C (score wrt eta_rho, Fisher hess wrt eta_rho)
+  ## Derivatives
   f$score <- list()
   f$hess  <- list()
 
@@ -232,6 +232,133 @@ DK <- function(k = 4, useC = TRUE)
       alpha,                  # n x mA alpha
       PACKAGE = "dontknow"
     )
+  }
+
+  ## score wrt eta_mu1
+  f$score$mu1 <- function(y, par, ...) {
+    y <- as.matrix(y)
+
+    alpha <- do.call("cbind", par[alpha_names])
+    if(k > 2L) {
+      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
+    }
+
+    .Call(
+      "score_mu1_dontknow",
+      as.numeric(par$mu1),    # Eta1
+      as.numeric(par$mu2),    # Eta2
+      as.numeric(par$rho),    # rho
+      alpha,                  # n x mA alpha
+      y,                      # n x 2 Y (y1,y2), y2 starts at 0
+      PACKAGE = "dontknow"
+    )
+  }
+
+  ## score wrt eta_mu2
+  f$score$mu2 <- function(y, par, ...) {
+    y <- as.matrix(y)
+
+    alpha <- do.call("cbind", par[alpha_names])
+    if(k > 2L) {
+      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
+    }
+
+    .Call(
+      "score_mu2_dontknow",
+      as.numeric(par$mu1),
+      as.numeric(par$mu2),
+      as.numeric(par$rho),
+      alpha,
+      y,
+      PACKAGE = "dontknow"
+    )
+  }
+
+  ## Hessian (Fisher info) wrt eta_mu1
+  f$hess$mu1 <- function(y, par, ...) {
+    ## y is not needed for Fisher, covariates/parameters are enough.
+
+    alpha <- do.call("cbind", par[alpha_names])
+    if(k > 2L) {
+      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
+    }
+
+    .Call(
+      "hess_mu1_dontknow",
+      as.numeric(par$mu1),
+      as.numeric(par$mu2),
+      as.numeric(par$rho),
+      alpha,
+      PACKAGE = "dontknow"
+    )
+  }
+
+  ## Hessian (Fisher info) wrt eta_mu2
+  f$hess$mu2 <- function(y, par, ...) {
+
+    alpha <- do.call("cbind", par[alpha_names])
+    if(k > 2L) {
+      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
+    }
+
+    .Call(
+      "hess_mu2_dontknow",
+      as.numeric(par$mu1),
+      as.numeric(par$mu2),
+      as.numeric(par$rho),
+      alpha,
+      PACKAGE = "dontknow"
+    )
+  }
+
+  ## convenience to build monotonized alpha matrix
+  build_alpha <- function(par) {
+    a <- do.call("cbind", par[alpha_names])
+    if (k > 2L) {
+      a[, -1L] <- t(apply(a[, -1L], 1L, inc2cut))
+    }
+    a
+  }
+
+  for (jj in seq_along(alpha_names)) {
+    par_name <- alpha_names[jj]       # "alpha1", "alpha2", ...
+    j_idx <- jj                       # 1-based column index
+
+    ## score wrt alpha_j
+    f$score[[par_name]] <- local({
+      j <- j_idx
+      function(y, par, ...) {
+        y <- as.matrix(y)
+        alpha <- build_alpha(par)
+        .Call(
+          "score_alpha_dontknow",
+          as.numeric(par$mu1),
+          as.numeric(par$mu2),
+          as.numeric(par$rho),
+          alpha,
+          y,
+          as.integer(j),
+          PACKAGE = "dontknow"
+        )
+      }
+    })
+
+    ## hessian (Fisher) wrt alpha_j
+    f$hess[[par_name]] <- local({
+      j <- j_idx
+      function(y, par, ...) {
+        alpha <- build_alpha(par)
+        .Call(
+          "hess_alpha_dontknow",
+          as.numeric(par$mu1),
+          as.numeric(par$mu2),
+          as.numeric(par$rho),
+          alpha,
+          as.integer(j),
+          PACKAGE = "dontknow"
+        )
+      }
+    })
   }
 
   class(f) <- "gamlss2.family"
