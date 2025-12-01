@@ -4,7 +4,8 @@ import("mgcv")
 importFrom("stats", "pnorm")
 
 export(
-  "DK"
+  "DK",
+  "sim_DK"
 )
 
 useDynLib(dontknow, .registration = TRUE)

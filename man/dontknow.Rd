@@ -2,6 +2,7 @@
 \alias{DK}
 \alias{DK}
 \alias{dontknow}
+\alias{sim_DK}
 
 \title{Don't Know (DK) Family}
 
@@ -10,12 +11,19 @@
 }
 
 \usage{
+## family function
 DK(k = 4, useC = TRUE)
+
+## simulation function for DK(4)
+sim_DK(n = 1000, rho = 0.5)
 }
 
 \arguments{
   \item{k}{Integer, the number of levels of y2. Defaul is \code{k = 4}.}
   \item{useC}{Logical, should the C version of the log-likelihood be used?}
+  \item{n}{Integer, number of observations to simulate.}
+  \item{rho}{Numeric, the correlation parameter. If \code{rho = NULL}
+    \code{rho} is a function of covariate \code{x3}.}
 }
 
 \details{

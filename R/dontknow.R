@@ -7,6 +7,50 @@ inc2cut <- function(x)
   return(x)
 }
 
+## Bivariate standard normal pdf at (h, k) with correlation rho.
+DK_bvn_pdf <- function(h, k, rho) {
+  if(!is.finite(h) || !is.finite(k)) return(0)
+
+  r <- max(min(rho, 0.999999999), -0.999999999)
+  omr2 <- 1 - r^2
+  if(omr2 <= 0) return(0)
+
+  quad <- (h^2 - 2 * r * h * k + k^2) / omr2
+  pref <- 1 / (2 * pi * sqrt(omr2))
+  pref * exp(-0.5 * quad)
+}
+
+## dell phi2 / dell rho at (h, k; rho).
+DK_bvn_pdf_drho <- function(h, k, rho) {
+  if(!is.finite(h) || !is.finite(k)) return(0)
+
+  r <- max(min(rho, 0.999999999), -0.999999999)
+  omr2 <- 1 - r^2
+  if(omr2 <= 0) return(0)
+
+  cval <- h^2 - 2 * r * h * k + k^2
+
+  ## d/dρ log φ₂(h,k;ρ)
+  dlogphi <- r / omr2 +
+    (h * k * omr2 - r * cval) / (omr2^2)
+
+  phi <- DK_bvn_pdf(h, k, r)
+  phi * dlogphi
+}
+
+## rhogit inverse-link derivatives expressed in terms of rho
+DK_rhogit_d1 <- function(rho) {
+  r <- pmax(pmin(rho, 0.999999999), -0.999999999)
+  omr2 <- pmax(1 - r^2, .Machine$double.eps)
+  omr2^(3/2)          # d rho / d eta
+}
+
+DK_rhogit_d2 <- function(rho) {
+  r <- pmax(pmin(rho, 0.999999999), -0.999999999)
+  omr2 <- pmax(1 - r^2, .Machine$double.eps)
+  -3 * r * omr2^2     # d^2 rho / d eta^2
+}
+
 ## logLik function.
 logLik_dontknow <- function(eta1, eta2, rho, alpha, y, log = TRUE)
 {
@@ -147,6 +191,49 @@ DK <- function(k = 4, useC = TRUE)
     return(TRUE)
   }
 
+  ## Derivatives for rho via C (score wrt eta_rho, Fisher hess wrt eta_rho)
+  f$score <- list()
+  f$hess  <- list()
+
+  f$score$rho <- function(y, par, ...) {
+    y <- as.matrix(y)
+
+    ## alpha matrix with increasing cuts (same as in pdf/logLik)
+    alpha <- do.call("cbind", par[alpha_names])
+    if(k > 2L) {
+      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
+    }
+
+    .Call(
+      "score_rho_dontknow",
+      as.numeric(par$mu1),    # Eta1 on mean scale
+      as.numeric(par$mu2),    # Eta2 on mean scale
+      as.numeric(par$rho),    # rho on parameter scale
+      alpha,                  # n x mA alpha matrix (already monotone)
+      y,                      # n x 2 response (y1, y2) with y2 in {0,...}
+      PACKAGE = "dontknow"
+    )
+  }
+
+  f$hess$rho <- function(y, par, ...) {
+    ## y not needed for Fisher info (we integrate over categories), but
+    ## signature is fixed, so we still accept it.
+
+    alpha <- do.call("cbind", par[alpha_names])
+    if(k > 2L) {
+      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
+    }
+
+    .Call(
+      "hess_rho_dontknow",
+      as.numeric(par$mu1),    # Eta1
+      as.numeric(par$mu2),    # Eta2
+      as.numeric(par$rho),    # rho (parameter scale)
+      alpha,                  # n x mA alpha
+      PACKAGE = "dontknow"
+    )
+  }
+
   class(f) <- "gamlss2.family"
   f
 }
@@ -219,5 +306,45 @@ cdf_dontknow <- function(par)
     }
   }
   out
+}
+
+sim_DK <- function(n = 1000, rho = 0.5)
+{
+  stopifnot(requireNamespace("mvtnorm"))
+
+  d <- data.frame(
+    "x1" = runif(n, -3, 3),
+    "x2" = runif(n, -3, 3),
+    "x3" = runif(n, -3, 3)
+  )
+
+  mu1 <- sin(d$x1) * 2
+  mu2 <- d$x2^2 - 3
+  rl <- make.link2("rhogit")
+  if(is.null(rho)) {
+    rho <- rl$linkinv(cos(d$x3))
+  } else {
+    rho <- rep(rho, length.out = n)
+  }
+
+  alpha1 <- c(-Inf, 0, Inf)
+  alpha2 <- c(-Inf, -1, 0, 1, Inf)
+
+  yhelp <- NULL
+  for(i in 1:n) {
+    Sigma <- matrix(c(1, rho[i], rho[i], 1), 2, 2)
+    yhelp <- rbind(yhelp, mvtnorm::rmvnorm(1, mean = c(0, 0), sigma = Sigma))
+  }
+
+  y1star <- mu1 + yhelp[, 1]
+  y2star <- mu2 + yhelp[, 2]
+
+  d$y1 <- cut(y1star, alpha1, labels = FALSE) - 1
+  d$y2 <- cut(y2star, alpha2, labels = FALSE) - 1
+
+  ## new response
+  d$Y <- cbind(d$y1, d$y2)
+
+  return(d)
 }
 
