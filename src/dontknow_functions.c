@@ -84,7 +84,7 @@ SEXP logLik_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha, SEXP Y, SEXP Lo
                 (long)nRho, n);
 
     const int logp = LOGICAL(LogOut)[0] == TRUE;
-    const int steps = 16; /* Miwa grid; change here if you want another default */
+    const int steps = 64; /* Miwa grid; change here if you want another default */
 
     /* output */
     SEXP out = PROTECT(allocVector(REALSXP, n));
@@ -259,7 +259,7 @@ SEXP score_rho_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha, SEXP Y)
         warning("rho length (%ld) not equal to n (%d); recycling will be used",
                 (long)nRho, n);
 
-    const int steps = 16;
+    const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *sc = REAL(out);
@@ -389,7 +389,7 @@ SEXP hess_rho_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha)
                 (long)nRho, n);
 
     const int K     = mA - 1;  /* number of ordinal categories */
-    const int steps = 16;
+    const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *w = REAL(out);
@@ -570,7 +570,7 @@ SEXP score_mu1_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha, SEXP Y)
         warning("rho length (%ld) not equal to n (%d); recycling will be used",
                 (long)nRho, n);
 
-    const int steps = 16;
+    const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *sc = REAL(out);
@@ -704,7 +704,7 @@ SEXP score_mu2_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha, SEXP Y)
         warning("rho length (%ld) not equal to n (%d); recycling will be used",
                 (long)nRho, n);
 
-    const int steps = 16;
+    const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *sc = REAL(out);
@@ -824,7 +824,7 @@ SEXP hess_mu1_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha)
                 (long)nRho, n);
 
     const int K     = mA - 1;  /* number of ordinal categories */
-    const int steps = 16;
+    const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *w = REAL(out);
@@ -942,7 +942,7 @@ SEXP hess_mu2_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha)
                 (long)nRho, n);
 
     const int K     = mA - 1;
-    const int steps = 16;
+    const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *w = REAL(out);
@@ -1056,7 +1056,7 @@ SEXP score_alpha_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho,
         warning("rho length (%ld) not equal to n (%d); recycling will be used",
                 (long)nRho, n);
 
-    const int steps = 16;
+    const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *sc = REAL(out);
@@ -1247,7 +1247,7 @@ SEXP hess_alpha_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho,
                 (long)nRho, n);
 
     const int K     = mA - 1;  /* # ordinal categories */
-    const int steps = 16;
+    const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *w = REAL(out);
