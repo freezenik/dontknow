@@ -314,13 +314,13 @@ DK <- function(k = 4, useC = TRUE)
   ## convenience to build monotonized alpha matrix
   build_alpha <- function(par) {
     a <- do.call("cbind", par[alpha_names])
-    if (k > 2L) {
+    if(k > 2L) {
       a[, -1L] <- t(apply(a[, -1L], 1L, inc2cut))
     }
     a
   }
 
-  for (jj in seq_along(alpha_names)) {
+  for(jj in seq_along(alpha_names)) {
     par_name <- alpha_names[jj]       # "alpha1", "alpha2", ...
     j_idx <- jj                       # 1-based column index
 
