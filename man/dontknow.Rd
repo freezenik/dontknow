@@ -111,15 +111,7 @@ plot(d$x3[i], par$rho[i], type = "l", col = 2, lwd = 2,
 lines(rho[i] ~ d$x3[i], col = 4, lwd = 2)
 
 ## check cuts
-inc2cut <- function(x)
-{
-  if(length(x) > 1L) {
-    x[-1L] <- x[1L] + cumsum(exp(x[-1L]))
-  }
-  return(x)
-}
-
-alpha <- t(apply(par[, 5:7], 1, inc2cut))
+alpha <- family(b)$alpha(par)
 head(alpha)
 
 ## Plot ystars.

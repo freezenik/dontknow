@@ -155,8 +155,6 @@ DK <- function(k = 4, useC = TRUE)
     if(k > 2L)
       alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
 
-    probs <- cdf_dontknow_R(par$mu1, par$mu2, par$rho, alpha)
-
     ## probs: n x (K+1), col1=dk, col(c+2)=category c
     ## build cumulative along that order:
     cprobs <- t(apply(probs, 1L, cumsum))  ## n x (K+1)
@@ -360,6 +358,8 @@ DK <- function(k = 4, useC = TRUE)
       }
     })
   }
+
+  f$alpha <- build_alpha
 
   class(f) <- "gamlss2.family"
   f
