@@ -124,6 +124,9 @@ par(mfrow = c(1, 2))
 plot(y2star ~ y1star, data = d, col = col_fit, main = "Estimate")
 abline(h = alpha, lty = 2, col = "lightgray")
 plot(y2star ~ y1star, data = d, col = col_truth, main = "Truth")
+
+## DK calibration plot.
+family(b)$calibration(b, nbins = 20, plot = TRUE)
 }
 }
 

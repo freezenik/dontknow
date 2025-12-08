@@ -110,6 +110,15 @@ DK <- function(k = 4, useC = TRUE)
   names <- c("mu1", "mu2", "rho", alpha_names)
   links <- c("identity", "identity", "rhogit", rep("identity", length(alpha_names)))
 
+  ## convenience to build monotonized alpha matrix
+  build_alpha <- function(par) {
+    a <- do.call("cbind", par[alpha_names])
+    if(k > 2L) {
+      a[, -1L] <- t(apply(a[, -1L], 1L, inc2cut))
+    }
+    a
+  }
+
   f <- list(
     "family" = "DK",
     ## Parameterization: alpha1 is the binary cut; alpha2 ... alphak are the ordinal cuts.
@@ -176,7 +185,68 @@ DK <- function(k = 4, useC = TRUE)
   }
 
   f$probabilities <- function(par) {
-    cdf_dontknow(par)
+    eta1  <- par$mu1
+    eta2  <- par$mu2
+    rho   <- par$rho
+    alpha <- build_alpha(par)   ## <-- ordered thresholds
+
+    stopifnot(requireNamespace("mvtnorm"))
+
+    n <- length(eta1)
+    K <- ncol(alpha) - 1L
+    out <- matrix(NA_real_, n, K + 1L)
+
+    for(i in seq_len(n)) {
+      r <- rho[if(length(rho) == 1L) 1L else i]
+      r <- max(min(r,  0.999999999), -0.999999999)
+
+      ## DK probability: P(Y1 = 1) = 1 - Phi(alpha1 - eta1)
+      Aup <- alpha[i, 1L] - eta1[i]
+      out[i, 1L] <- pnorm(Aup, lower.tail = FALSE)
+
+      Sigma <- matrix(c(1, r, r, 1), 2, 2)
+
+      ## Non-DK categories for Y2 = 0, ..., K-1
+      for(c in 0:(K-1L)) {
+        B1 <- if(c == 0L) -Inf else alpha[i, c+1L] - eta2[i]
+        B2 <- if(c+1L >= K)  Inf else alpha[i, c+2L] - eta2[i]
+
+        p_up <- if(is.infinite(B2) && B2 > 0) {
+          ## P(Z1 <= Aup) when Z2 <= +Inf
+          pnorm(Aup)
+        } else {
+          as.numeric(mvtnorm::pmvnorm(
+            lower = c(-Inf, -Inf),
+            upper = c(Aup, B2),
+            mean  = c(0, 0),
+            sigma = Sigma,
+            keepAttr = FALSE
+          ))
+        }
+
+        p_lo <- if(is.infinite(B1) && B1 < 0) {
+          0
+        } else {
+          as.numeric(mvtnorm::pmvnorm(
+            lower = c(-Inf, -Inf),
+            upper = c(Aup, B1),
+            mean  = c(0, 0),
+            sigma = Sigma,
+            keepAttr = FALSE
+          ))
+        }
+
+        pc <- p_up - p_lo
+        out[i, c + 2L] <- if(pc > 0) pc else 0
+      }
+    }
+
+    ## Optional: guard against tiny numerical drift
+    rs <- rowSums(out)
+    ok <- rs > 0 & is.finite(rs)
+    out[ok, ] <- out[ok, ] / rs[ok]
+
+    out
   }
 
   f$valid.response <- function(x) {
@@ -309,15 +379,6 @@ DK <- function(k = 4, useC = TRUE)
     )
   }
 
-  ## convenience to build monotonized alpha matrix
-  build_alpha <- function(par) {
-    a <- do.call("cbind", par[alpha_names])
-    if(k > 2L) {
-      a[, -1L] <- t(apply(a[, -1L], 1L, inc2cut))
-    }
-    a
-  }
-
   for(jj in seq_along(alpha_names)) {
     par_name <- alpha_names[jj]       # "alpha1", "alpha2", ...
     j_idx <- jj                       # 1-based column index
@@ -360,6 +421,30 @@ DK <- function(k = 4, useC = TRUE)
   }
 
   f$alpha <- build_alpha
+
+  f$calibration <- function(model, nbins = 20, plot = TRUE) {
+    mf <- model.frame(model)
+    par <- predict(model)
+    probs <- family(model)$probabilities(par)
+    p_hat <- probs[, 1]
+    ok <- !is.na(p_hat) & !is.na(mf$Y[, 1L])
+    p_hat <- p_hat[ok]
+    y1 <- mf$Y[ok, 1L] ## 1 = DK, 0 = non-DK
+    breaks <- seq(0, 1, length.out = nbins + 1)
+    g <- cut(p_hat, breaks = breaks, include.lowest = TRUE)
+    pred_bin <- tapply(p_hat, g, mean)
+    obs_bin <- tapply(y1 == 1, g, mean)
+    n_bin <- tapply(y1, g, length)
+    if(plot) {
+      plot(pred_bin, obs_bin, xlim = c(0, 1), ylim = c(0, 1),
+        xlab = "Predicted probability of DK",
+        ylab = "Observed DK frequency",
+        pch = 16, col = 4)
+      abline(0, 1, lty = 2)
+    }
+    rval <- data.frame("obs" = obs_bin, "pred" = pred_bin)
+    return(rval)
+  }
 
   class(f) <- "gamlss2.family"
   f
