@@ -126,7 +126,17 @@ abline(h = alpha, lty = 2, col = "lightgray")
 plot(y2star ~ y1star, data = d, col = col_truth, main = "Truth")
 
 ## DK calibration plot.
-family(b)$calibration(b, nbins = 20, plot = TRUE)
+calibration(b)
+
+## randomized quantile residuals
+r_DK <- residuals(b, DK = TRUE)
+r_cat <- residuals(b, DK = FALSE)
+
+par(mfrow = c(2, 3), oma = c(0, 0, 0, 4))
+plot(r_DK, spar = FALSE)
+mtext("DK residuals", side = 4, line = 2, font = 2)
+plot(r_cat, spar = FALSE)
+mtext("CAT residuals", side = 4, line = 2, font = 2)
 }
 }
 

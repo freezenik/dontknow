@@ -158,22 +158,22 @@ DK <- function(k = 4, useC = TRUE)
   )
 
   f$cdf <- function(y, par, lower.tail = TRUE, log.p = FALSE, ...) {
-    n <- length(par$mu1)
+    probs <- f$probabilities(par)          ## n x (K_cat+1)
+    n     <- nrow(probs)
+    K_cat <- ncol(probs) - 1L              ## Y2 categories 0, ..., K_cat-1
 
-    alpha <- do.call("cbind", par[alpha_names])
-    if(k > 2L)
-      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
-
-    ## probs: n x (K+1), col1=dk, col(c+2)=category c
-    ## build cumulative along that order:
-    cprobs <- t(apply(probs, 1L, cumsum))  ## n x (K+1)
-
-    ## coerce
+    ## coerce y
     if(length(y) == 1L)
       y <- rep.int(y, n)
     y <- as.integer(y)
-    if(any(y < 0L | y > (k-1L))) stop("y must be in 0..", k-1L)
 
+    if(any(y < 0L | y > (K_cat - 1L)))
+      stop("y must be in 0 ...", K_cat - 1L)
+
+    ## cumulative along order: DK, Y2=0, Y2=1, ...
+    cprobs <- t(apply(probs, 1L, cumsum))
+
+    ## index: DK = col 1, Y2 = c -> col c+2
     ans <- cprobs[cbind(seq_len(n), y + 1L)]
 
     if(!lower.tail)
@@ -188,17 +188,20 @@ DK <- function(k = 4, useC = TRUE)
     eta1  <- par$mu1
     eta2  <- par$mu2
     rho   <- par$rho
-    alpha <- build_alpha(par)   ## <-- ordered thresholds
+    alpha <- build_alpha(par)   ## ordered thresholds: alpha1 (DK), alpha2, ..., alpha_k (Y2 cuts)
 
     stopifnot(requireNamespace("mvtnorm"))
 
-    n <- length(eta1)
-    K <- ncol(alpha) - 1L
-    out <- matrix(NA_real_, n, K + 1L)
+    n     <- length(eta1)
+    Tcuts <- ncol(alpha) - 1L          ## number of finite cuts for Y2
+    K_cat <- Tcuts + 1L                ## number of Y2 categories: 0, ..., K_cat-1
+
+    ## matrix: col1 = DK, cols 2..(K_cat+1) = Y2 = 0, ..., K_cat-1
+    out <- matrix(NA_real_, n, K_cat + 1L)
 
     for(i in seq_len(n)) {
       r <- rho[if(length(rho) == 1L) 1L else i]
-      r <- max(min(r,  0.999999999), -0.999999999)
+      r <- max(min(r, 0.999999999), -0.999999999)
 
       ## DK probability: P(Y1 = 1) = 1 - Phi(alpha1 - eta1)
       Aup <- alpha[i, 1L] - eta1[i]
@@ -206,10 +209,14 @@ DK <- function(k = 4, useC = TRUE)
 
       Sigma <- matrix(c(1, r, r, 1), 2, 2)
 
-      ## Non-DK categories for Y2 = 0, ..., K-1
-      for(c in 0:(K-1L)) {
-        B1 <- if(c == 0L) -Inf else alpha[i, c+1L] - eta2[i]
-        B2 <- if(c+1L >= K)  Inf else alpha[i, c+2L] - eta2[i]
+      ## finite cuts for Y2 on latent scale (Z2), for this i
+      ## alpha2..alpha_k, so length(Tcuts)
+      cuts <- alpha[i, -1L] - eta2[i]
+
+      ## non-DK categories for Y2 = 0, ..., K_cat-1
+      for(c in 0:(K_cat - 1L)) {
+        B1 <- if(c == 0L)          -Inf else cuts[c]       ## lower bound
+        B2 <- if(c == (K_cat - 1L)) Inf else cuts[c + 1L]  ## upper bound
 
         p_up <- if(is.infinite(B2) && B2 > 0) {
           ## P(Z1 <= Aup) when Z2 <= +Inf
@@ -241,10 +248,13 @@ DK <- function(k = 4, useC = TRUE)
       }
     }
 
-    ## Optional: guard against tiny numerical drift
+    ## guard against small numerical drift
     rs <- rowSums(out)
     ok <- rs > 0 & is.finite(rs)
     out[ok, ] <- out[ok, ] / rs[ok]
+
+    ## column names: "DK", "Y2.0", "Y2.1", ..., "Y2.(K_cat-1)"
+    colnames(out) <- c("DK", paste0("Y2.", seq_len(ncol(out) - 1L) - 1L))
 
     out
   }
@@ -422,28 +432,12 @@ DK <- function(k = 4, useC = TRUE)
 
   f$alpha <- build_alpha
 
-  f$calibration <- function(model, nbins = 20, plot = TRUE) {
-    mf <- model.frame(model)
-    par <- predict(model)
-    probs <- family(model)$probabilities(par)
-    p_hat <- probs[, 1]
-    ok <- !is.na(p_hat) & !is.na(mf$Y[, 1L])
-    p_hat <- p_hat[ok]
-    y1 <- mf$Y[ok, 1L] ## 1 = DK, 0 = non-DK
-    breaks <- seq(0, 1, length.out = nbins + 1)
-    g <- cut(p_hat, breaks = breaks, include.lowest = TRUE)
-    pred_bin <- tapply(p_hat, g, mean)
-    obs_bin <- tapply(y1 == 1, g, mean)
-    n_bin <- tapply(y1, g, length)
-    if(plot) {
-      plot(pred_bin, obs_bin, xlim = c(0, 1), ylim = c(0, 1),
-        xlab = "Predicted probability of DK",
-        ylab = "Observed DK frequency",
-        pch = 16, col = 4)
-      abline(0, 1, lty = 2)
+  f$residuals <- function(object, DK = TRUE, ...) {
+    if(DK) {
+      return(rqres_DK_indicator(object, ...))
+    } else {
+      return(rqres_DK_ordinal(object, ...))
     }
-    rval <- data.frame("obs" = obs_bin, "pred" = pred_bin)
-    return(rval)
   }
 
   class(f) <- "gamlss2.family"
@@ -558,5 +552,137 @@ sim_DK <- function(n = 1000, rho = 0.5)
   d$Y <- cbind(d$y1, d$y2)
 
   return(d)
+}
+
+rqres_DK_indicator <- function(object, ...)
+{
+  fam <- family(object)
+  if(!identical(fam$family, "DK"))
+    stop("DK family required.")
+
+  mf <- model.frame(object)
+  Y  <- mf$Y
+  par   <- predict(object)
+  probs <- fam$probabilities(par)
+
+  y1 <- Y[, 1L]
+  p1 <- probs[, 1L] ## P(DK)
+
+  ## probabilities for Y1=0 and Y1=1
+  p0 <- 1 - p1
+
+  F_upper <- ifelse(y1 == 0L, p0, 1)
+  F_lower <- ifelse(y1 == 0L, 0, p0)
+
+  u <- runif(length(y1), F_lower, F_upper)
+  qnorm(u)
+}
+
+rqres_DK_ordinal <- function(object, ...)
+{
+  fam <- family(object)
+  if(!identical(fam$family, "DK"))
+    stop("DK family required.")
+
+  mf   <- model.frame(object)
+  Y    <- mf$Y
+  par  <- predict(object)
+  probs <- fam$probabilities(par)
+
+  y1 <- Y[, 1L]
+  y2 <- Y[, 2L]
+
+  ## only non-DK observations
+  keep <- (y1 == 0L)
+  if(!any(keep))
+    stop("No non-DK observations.")
+
+  probs_ndk <- probs[keep, , drop = FALSE]
+  y2_ndk    <- y2[keep]
+
+  ## probs_ndk: col1 = DK, cols 2..(K+1) = Y2 = 0..K-1
+  K <- ncol(probs_ndk) - 1L
+
+  ## check that y2 is in the supported range 0, ..., K-1
+  if(any(y2_ndk < 0L | y2_ndk > (K - 1L))) {
+    bad_vals <- sort(unique(y2_ndk[y2_ndk < 0L | y2_ndk > (K - 1L)]))
+    stop(
+      "y2 has values outside the supported range 0..", K - 1L,
+      " implied by DK(k).\n",
+      "Offending values: ", paste(bad_vals, collapse = ", "), "\n",
+      "Either recode y2 to 0..", K - 1L,
+      " or adjust the DK(k) specification so that all categories are represented."
+    )
+  }
+
+  ## conditional probabilities for Y2 = c given Y1 = 0
+  p_dk  <- probs_ndk[, 1L]
+  p_y2  <- probs_ndk[, -1L, drop = FALSE] ## cols for Y2 = 0, ..., K-1
+  p_tot <- 1 - p_dk                       ## = P(Y1 = 0)
+
+  ## we can only define conditional probs where P(Y1=0) > 0
+  ok_row <- is.finite(p_tot) & (p_tot > 0)
+
+  if(!any(ok_row)) {
+    warning("No non-DK observations with positive predicted P(Y1=0); returning NA.")
+    return(rep(NA_real_, length(y1)))
+  }
+
+  ## conditional probs only for "ok" rows
+  p_cond <- matrix(NA_real_, nrow(p_y2), ncol(p_y2))
+  p_cond[ok_row, ] <- p_y2[ok_row, , drop = FALSE] / p_tot[ok_row]
+
+  ## cumulative over Y2 categories 0..K-1
+  cprobs_cond <- t(apply(p_cond, 1L, cumsum))
+
+  z <- y2_ndk
+
+  ## indices of rows where we have a proper conditional distribution
+  ok_z <- ok_row & !is.na(z)
+
+  ## F_upper for all ok_z
+  F_upper_ndk <- rep(NA_real_, length(z))
+  idx_up <- which(ok_z)
+  if(length(idx_up) > 0L) {
+    F_upper_ndk[idx_up] <- cprobs_cond[cbind(idx_up, z[idx_up] + 1L)]
+  }
+
+  ## F_lower: do NOT use ifelse with matrix indexing
+  F_lower_ndk <- rep(NA_real_, length(z))
+  ## z == 0: lower bound is 0
+  idx0 <- which(ok_z & z == 0L)
+  if(length(idx0) > 0L)
+    F_lower_ndk[idx0] <- 0
+
+  ## z > 0: lower bound is cumulative up to category (z-1)
+  idx_pos <- which(ok_z & z > 0L)
+  if(length(idx_pos) > 0L)
+    F_lower_ndk[idx_pos] <- cprobs_cond[cbind(idx_pos, z[idx_pos])]
+
+  ## clamp to [0, 1] and fix potential tiny numerical inversions
+  F_upper_ndk <- pmin(pmax(F_upper_ndk, 0), 1)
+  F_lower_ndk <- pmin(pmax(F_lower_ndk, 0), 1)
+
+  bad_bounds <- !is.na(F_lower_ndk) & !is.na(F_upper_ndk) &
+    (F_lower_ndk > F_upper_ndk)
+  if(any(bad_bounds)) {
+    tmp <- F_lower_ndk[bad_bounds]
+    F_lower_ndk[bad_bounds] <- F_upper_ndk[bad_bounds]
+    F_upper_ndk[bad_bounds] <- tmp
+  }
+
+  ## simulate u only where we have valid bounds
+  good <- !is.na(F_lower_ndk) & !is.na(F_upper_ndk)
+  u_ndk <- rep(NA_real_, length(z))
+  if(any(good))
+    u_ndk[good] <- runif(sum(good), F_lower_ndk[good], F_upper_ndk[good])
+
+  r_ndk <- ifelse(is.na(u_ndk), NA_real_, qnorm(u_ndk))
+
+  ## plug back into full residual vector (non-DK only)
+  res <- rep(NA_real_, length(y1))
+  res[keep] <- r_ndk
+
+  res
 }
 
