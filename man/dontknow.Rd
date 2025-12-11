@@ -1,5 +1,4 @@
-\name{dk4}
-\alias{DK}
+\name{DK}
 \alias{DK}
 \alias{dontknow}
 \alias{sim_DK}

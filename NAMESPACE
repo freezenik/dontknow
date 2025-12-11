@@ -1,7 +1,7 @@
 import("gamlss2")
 import("mgcv")
 
-importFrom("stats", "pnorm", "runif")
+importFrom("stats", "pnorm", "runif", "family", "model.frame", "predict", "qnorm")
 
 export(
   "DK",

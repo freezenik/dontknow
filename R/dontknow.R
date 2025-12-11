@@ -30,7 +30,6 @@ DK_bvn_pdf_drho <- function(h, k, rho) {
 
   cval <- h^2 - 2 * r * h * k + k^2
 
-  ## d/dρ log φ₂(h,k;ρ)
   dlogphi <- r / omr2 +
     (h * k * omr2 - r * cval) / (omr2^2)
 
