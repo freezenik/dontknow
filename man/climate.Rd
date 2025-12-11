@@ -120,6 +120,7 @@ data("climate")
 }
 
 \examples{\dontrun{data("climate")
+library("gamlss2")
 
 ## inspect response
 table(climate$climate)
