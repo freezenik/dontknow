@@ -1,0 +1,21 @@
+bibentry(
+  bibtype = "InProceedings",
+  title = "Regularization in Partially Ordinal Regression Models",
+  author = c(
+    person("Andreas", "Groll"),
+    person("Maria", "Iannaro"),
+    person("Thomas", "Kneib"),
+    person("Nikolaus", "Umlauf")
+  ),
+  booktitle = "Proceedings of the 39th International Workshop on Statistical Modelling, Limerick, Ireland",
+  year = "2025",
+  pages = "201--206",
+  url = "https://iwsm2025.ie/wp-content/uploads/2025/07/IWSM2025_Limerick_Proceedings.pdf",
+  textVersion = paste(
+    "Groll, A., Iannaro, M., Kneib, T., and Umlauf, N. (2025).",
+    "Regularization in Partially Ordinal Regression Models.",
+    "In: Proceedings of the 39th International Workshop on Statistical Modelling,",
+    "Limerick, Ireland, pp. 201-206."
+  )
+)
+
