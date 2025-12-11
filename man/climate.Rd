@@ -17,7 +17,7 @@ data("climate")
 }
 
 \format{
-  A data frame with \emph{approximately} 480 observations (after
+  A data frame with 25803 observations (after
   filtering and listwise deletion of missing values) on the following
   9 variables:
   \describe{
@@ -103,8 +103,7 @@ data("climate")
   \code{Y = (Y_1, Y_2)} where \code{Y_1} indicates whether the
   \dQuote{don't know} option is chosen and \code{Y_2} encodes the
   non-\dQuote{don't know} ordered categories. The exact transformation
-  steps are given in the Examples and follow the implementation in the
-  empirical application.
+  steps are given in the examples.
 }
 
 \source{
