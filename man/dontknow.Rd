@@ -14,7 +14,7 @@
 DK(k = 4, useC = TRUE)
 
 ## simulation function for DK(4)
-sim_DK(n = 1000, rho = 0.5)
+sim_DK(n = 1000, rho = NULL)
 }
 
 \arguments{
