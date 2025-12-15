@@ -513,46 +513,6 @@ cdf_dontknow <- function(par)
   out
 }
 
-sim_DK <- function(n = 1000, rho = 0.5)
-{
-  stopifnot(requireNamespace("mvtnorm"))
-
-  d <- data.frame(
-    "x1" = runif(n, -3, 3),
-    "x2" = runif(n, -3, 3),
-    "x3" = runif(n, -3, 3)
-  )
-
-  mu1 <- sin(d$x1) * 2
-  mu2 <- d$x2^2 - 3
-  rl <- make.link2("rhogit")
-  if(is.null(rho)) {
-    rho <- rl$linkinv(cos(d$x3))
-  } else {
-    rho <- rep(rho, length.out = n)
-  }
-
-  alpha1 <- c(-Inf, 0, Inf)
-  alpha2 <- c(-Inf, -1, 0, 1, Inf)
-
-  yhelp <- NULL
-  for(i in 1:n) {
-    Sigma <- matrix(c(1, rho[i], rho[i], 1), 2, 2)
-    yhelp <- rbind(yhelp, mvtnorm::rmvnorm(1, mean = c(0, 0), sigma = Sigma))
-  }
-
-  y1star <- mu1 + yhelp[, 1]
-  y2star <- mu2 + yhelp[, 2]
-
-  d$y1 <- cut(y1star, alpha1, labels = FALSE) - 1
-  d$y2 <- cut(y2star, alpha2, labels = FALSE) - 1
-
-  ## new response
-  d$Y <- cbind(d$y1, d$y2)
-
-  return(d)
-}
-
 rqres_DK_indicator <- function(object, ...)
 {
   fam <- family(object)
