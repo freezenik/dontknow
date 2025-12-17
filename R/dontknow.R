@@ -439,6 +439,9 @@ DK <- function(k = 4, useC = TRUE)
     }
   }
 
+  f$score <- NULL
+  f$hess <- NULL
+
   class(f) <- "gamlss2.family"
   f
 }

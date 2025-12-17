@@ -1,7 +1,7 @@
 Package: dontknow
 Title: Models with Don't Know Option
 Version: 0.1-0
-Date: 2025-12-11
+Date: 2025-12-17
 Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"),
                email = "Nikolaus.Umlauf@uibk.ac.at", comment = c(ORCID = "0000-0003-2160-9803")),
              person(given = "Thomas", family = "Kneib", role = "aut", email = "tkneib@uni-goettingen.de",
@@ -10,8 +10,8 @@ Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"
                comment = c(ORCID = "0000-0001-6787-9118")))
 Description: Families for estimating models with a don't know option.
 License: GPL-2 | GPL-3
-URL: https://gamlss-dev.github.io/gamlss2/
-BugReports: https://github.com/gamlss-dev/gamlss2/issues
+URL: https://github.com/freezenik/dontknow
+BugReports: https://github.com/freezenik/dontknow/issues
 Depends: R (>= 4.1.0), gamlss2, mgcv
 Imports: mvtnorm
 LazyLoad: yes
