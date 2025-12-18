@@ -118,6 +118,10 @@ DK <- function(k = 4, useC = TRUE)
     a
   }
 
+  if(length(useC) < 2L)
+    useC <- c(useC, FALSE, FALSE)
+  useC <- rep(useC, length.out = 3L)
+
   f <- list(
     "family" = "DK",
     ## Parameterization: alpha1 is the binary cut; alpha2 ... alphak are the ordinal cuts.
@@ -136,7 +140,7 @@ DK <- function(k = 4, useC = TRUE)
         alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
       }
 
-      ll <- if(isTRUE(useC)) {
+      ll <- if(isTRUE(useC[1L])) {
         logLik_dontknow_C
       } else {
         logLik_dontknow
@@ -439,8 +443,10 @@ DK <- function(k = 4, useC = TRUE)
     }
   }
 
-  f$score <- NULL
-  f$hess <- NULL
+  if(!useC[2L])
+    f$score <- NULL
+  if(!useC[3L])
+    f$hess <- NULL
 
   class(f) <- "gamlss2.family"
   f
