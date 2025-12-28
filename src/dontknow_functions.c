@@ -1209,7 +1209,7 @@ SEXP score_alpha_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho,
         }
     }
 
-    UNPROTECT(6);
+    UNPROTECT(7);
     return out;
 }
 
@@ -1338,7 +1338,7 @@ SEXP hess_alpha_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho,
         w[i] = w_i;
     }
 
-    UNPROTECT(5);
+    UNPROTECT(6);
     return out;
 }
 

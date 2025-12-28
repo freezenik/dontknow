@@ -8,9 +8,10 @@ sim_DK <- function(n = 1000, rho = NULL, shift = 0)
     "x3" = runif(n, -3, 3)
   )
 
-  for(j in 1:3) {
+  for(j in 1:2) {
     d[[paste0("id", j)]] <- factor(sample(1:5, size = n, replace = TRUE))
   }
+  d[[paste0("id", 3)]] <- factor(sample(1:14, size = n, replace = TRUE))
   for(j in c(4, 6, 8)) {
     d[[paste0("id", j)]] <- factor(sample(1:4, size = n, replace = TRUE))
   }
@@ -18,9 +19,9 @@ sim_DK <- function(n = 1000, rho = NULL, shift = 0)
     d[[paste0("id", j)]] <- factor(sample(1:6, size = n, replace = TRUE))
   }
 
-  b1 <- c(0, 1.5, -1.2, 0.5, -1.5)
-  b2 <- c(0, -1.2, 1.2, 1.5, -1.5)
-  b3 <- c(0, -1, -3, 1, -0.5)
+  b1 <- c(0, 1.5, -1.2, -0.5, 1.5)
+  b2 <- c(0, 1.2, 1.2, -2, -1.5)
+  b3 <- c(0, -1, -1, -2, -2, 0.5, 2, 0.5, 1, 1, 1, -2, 2, 0.5)
 
   X1 <- model.matrix(~ id1, data = d)
   X2 <- model.matrix(~ id2, data = d)
