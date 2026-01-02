@@ -136,6 +136,26 @@ plot(r_DK, spar = FALSE)
 mtext("DK residuals", side = 4, line = 2, font = 2)
 plot(r_cat, spar = FALSE)
 mtext("CAT residuals", side = 4, line = 2, font = 2)
+
+## simulation study
+set.seed(1328)
+d <- sim_DK(2000)
+
+## formula
+f <- Y ~ -1 + s(x1) + la(id1,type=4) + la(id4,type=2) + la(id5,type=2) |
+  -1 + s(x2) + la(id2,type=4) + la(id6,type=2) + la(id7,type=2) |
+   1 + s(x3) + la(id3,type=4) + la(id8,type=2) + la(id9,type=2)
+
+## estimate model
+b <- gamlss2(f, family = DK(4), data = d)
+
+## plot effects
+plot(b)
+
+## coefficient paths
+plot_lasso(b, which = "coefficients", term = "mu1")
+plot_lasso(b, which = "coefficients", term = "mu2")
+plot_lasso(b, which = "coefficients", term = "rho")
 }
 }
 
