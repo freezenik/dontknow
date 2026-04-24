@@ -1,7 +1,7 @@
 Package: dontknow
 Title: Models with Don't Know Option
 Version: 0.1-0
-Date: 2025-12-17
+Date: 2026-04-24
 Authors@R: c(person(given = "Nikolaus", family = "Umlauf", role = c("aut", "cre"),
                email = "Nikolaus.Umlauf@uibk.ac.at", comment = c(ORCID = "0000-0003-2160-9803")),
              person(given = "Thomas", family = "Kneib", role = "aut", email = "tkneib@uni-goettingen.de",
