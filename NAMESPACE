@@ -1,12 +1,11 @@
 import("gamlss2")
 import("mgcv")
 
-importFrom("stats", "pnorm", "runif", "family", "model.frame", "predict", "qnorm")
+importFrom("stats", "pnorm", "runif", "family", "model.frame", "model.matrix", "predict", "qnorm")
 
 export(
   "DK",
   "sim_DK"
 )
 
-useDynLib(dontknow, .registration = TRUE)
-
+useDynLib(dontknow, .registration = TRUE, .fixes = "C_")

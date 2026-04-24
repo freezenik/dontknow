@@ -14,23 +14,39 @@
 DK(k = 4, useC = TRUE)
 
 ## simulation function for DK(4)
-sim_DK(n = 1000, rho = NULL)
+sim_DK(n = 1000, rho = NULL, shift = 0)
 }
 
 \arguments{
-  \item{k}{Integer, the number of levels of y2. Defaul is \code{k = 4}.}
+  \item{k}{Integer, the number of levels of \code{y2}. Default is \code{k = 4}.}
   \item{useC}{Logical, should the C version of the log-likelihood be used?}
   \item{n}{Integer, number of observations to simulate.}
   \item{rho}{Numeric, the correlation parameter. If \code{rho = NULL}
     \code{rho} is a function of covariate \code{x3}.}
+  \item{shift}{Numeric shift added to the latent mean predictor \code{mu1}
+    in the simulation design.}
 }
 
 \details{
-  Details comming soon!
+  \code{DK()} defines a \code{"gamlss2.family"} object for models with an
+  explicit \dQuote{don't know} response option. The response is represented
+  as a two-column matrix \code{Y = cbind(y1, y2)} where \code{y1} is a
+  binary indicator for choosing the \dQuote{don't know} option and
+  \code{y2} is an ordinal response for the non-\dQuote{don't know}
+  categories, coded as \code{0, 1, \dots, k - 1}.
+
+  \code{sim_DK()} generates synthetic data from the same latent-variable
+  construction used in the examples, returning covariates, latent effects,
+  latent responses, and the bivariate response matrix \code{Y}.
 }
 
 \value{
-  A \code{"gamlss2.family"} object to be used with \code{\link{gamlss2}}.
+  \code{DK()} returns a \code{"gamlss2.family"} object to be used with
+  \code{\link{gamlss2}}.
+
+  \code{sim_DK()} returns a data frame containing simulated covariates,
+  latent predictors, latent responses, observed responses \code{y1} and
+  \code{y2}, and the combined bivariate response \code{Y}.
 }
 
 \seealso{
@@ -162,4 +178,3 @@ plot_lasso(b, which = "coefficients", term = "rho")
 \keyword{regression}
 \keyword{models}
 \keyword{distribution}
-

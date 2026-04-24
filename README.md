@@ -1,18 +1,35 @@
 # R package dontknow
 
-STAR models with "don’t know" - R package for a paper extending ordinal STAR via GAMLSS with LASSO/group/fused penalties, sims + application.
+`dontknow` provides a `gamlss2` family for models with an explicit "don't know"
+response option, together with a simulation helper and an example data set.
 
-The package can be installed via
+The package depends on `gamlss2`, which can be installed from R-universe:
 
-``` r
-devtools::install_github("https://github.com/freezenik/dontknow")
+```r
+install.packages(
+  "gamlss2",
+  repos = c(
+    "https://gamlss-dev.R-universe.dev",
+    "https://cloud.R-project.org"
+  )
+)
 ```
 
-The required _gamlss2_ package can be installed with
+The package itself can then be installed from GitHub:
 
-``` r
+```r
+remotes::install_github("freezenik/dontknow")
+```
 
-install.packages("gamlss2",
-  repos = c("https://gamlss-dev.R-universe.dev",
-            "https://cloud.R-project.org"))
+Minimal example:
+
+```r
+library(gamlss2)
+library(dontknow)
+
+d <- sim_DK(500)
+f <- Y ~ -1 + s(x1) | -1 + s(x2) | 1
+b <- gamlss2(f, family = DK(4), data = d)
+
+summary(b)
 ```
