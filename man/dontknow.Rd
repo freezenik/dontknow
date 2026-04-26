@@ -6,7 +6,8 @@
 \title{Don't Know (DK) Family}
 
 \description{
-  Defines the don't know family.
+  Family for joint regression models with an explicit \dQuote{don't know}
+  response option.
 }
 
 \usage{
@@ -21,7 +22,9 @@ sim_DK(n = 1000, rho = NULL, shift = 0)
   \item{k}{Integer, the number of levels of \code{y2}. Default is \code{k = 4}.}
   \item{useC}{Logical or logical vector controlling use of compiled code for
     the log-likelihood, score, and Hessian. The default
-    \code{c(TRUE, TRUE, TRUE)} enables the C implementations for all three.}
+    \code{c(TRUE, TRUE, TRUE)} enables the C implementations for all three.
+    When score and Hessian are both enabled, \code{DK()} also uses a fused
+    compiled \code{z_weights} path for faster RS updates in \code{gamlss2}.}
   \item{n}{Integer, number of observations to simulate.}
   \item{rho}{Numeric, the correlation parameter. If \code{rho = NULL}
     \code{rho} is a function of covariate \code{x3}.}
@@ -36,6 +39,18 @@ sim_DK(n = 1000, rho = NULL, shift = 0)
   binary indicator for choosing the \dQuote{don't know} option and
   \code{y2} is an ordinal response for the non-\dQuote{don't know}
   categories, coded as \code{0, 1, \dots, k - 1}.
+
+  The family models three components jointly: the latent DK propensity
+  \code{mu1}, the latent ordinal propensity \code{mu2}, and the dependence
+  parameter \code{rho}. The default link for \code{rho} is \code{"rhogit"}.
+
+  The threshold parameters are named \code{alpha1}, \code{alpha2}, \dots,
+  \code{alphak}. Here \code{alpha1} is the DK threshold. The remaining
+  threshold parameters are internally optimized on an unconstrained increment
+  scale and transformed to ordered cutpoints on the latent ordinal scale.
+  Consequently, \code{predict(..., type = "parameter")} returns the raw
+  threshold parameters, while \code{family(object)$alpha(par)} returns the
+  ordered cutpoints actually used by the model.
 
   \code{sim_DK()} generates synthetic data from the same latent-variable
   construction used in the examples, returning covariates, latent effects,
