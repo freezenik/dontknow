@@ -34,27 +34,27 @@ remotes::install_github("freezenik/dontknow")
 Minimal example:
 
 ```r
-library(gamlss2)
-library(dontknow)
+library("gamlss2")
+library("dontknow")
 
 d <- sim_DK(500)
 
-# y1: DK indicator, y2: ordinal category among non-DK responses
+## y1: DK indicator, y2: ordinal category among non-DK responses
 head(d$Y)
 
-# remove intercepts in the latent mean predictors
+## remove intercepts in the latent mean predictors
 f <- Y ~ -1 + s(x1) | -1 + s(x2) | 1
 b <- gamlss2(f, family = DK(4), data = d)
 
 summary(b)
 
-# fitted distribution parameters
+## fitted distribution parameters
 par <- predict(b, type = "parameter")
 head(par$mu1)
 head(par$mu2)
 head(par$rho)
 
-# ordered thresholds on the latent scale
+## ordered thresholds on the latent scale
 head(family(b)$alpha(par))
 ```
 
@@ -63,3 +63,4 @@ Implementation note:
 `DK(4)` uses compiled code by default for the log-likelihood, score, and
 observed Hessian. When score and Hessian are both enabled, the family also uses
 a fused compiled `z_weights` path for faster RS updates in `gamlss2`.
+
