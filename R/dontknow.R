@@ -102,7 +102,7 @@ logLik_dontknow <- function(eta1, eta2, rho, alpha, y, log = TRUE)
 }
 
 ## Don't-know family: explicit thresholds as parameters.
-DK <- function(k = 4, useC = TRUE)
+DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
 {
   ## Parameter names in a guaranteed order.
   alpha_names <- c("alpha1", paste0("alpha", 2:k))
@@ -110,8 +110,12 @@ DK <- function(k = 4, useC = TRUE)
   links <- c("identity", "identity", "rhogit", rep("identity", length(alpha_names)))
 
   ## convenience to build monotonized alpha matrix
+  build_alpha_raw <- function(par) {
+    do.call("cbind", par[alpha_names])
+  }
+
   build_alpha <- function(par) {
-    a <- do.call("cbind", par[alpha_names])
+    a <- build_alpha_raw(par)
     if(k > 2L) {
       a[, -1L] <- t(apply(a[, -1L], 1L, inc2cut))
     }
@@ -280,10 +284,7 @@ DK <- function(k = 4, useC = TRUE)
     y <- as.matrix(y)
 
     ## alpha matrix with increasing cuts (same as in pdf/logLik)
-    alpha <- do.call("cbind", par[alpha_names])
-    if(k > 2L) {
-      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
-    }
+    alpha <- build_alpha(par)
 
     .Call(
       "score_rho_dontknow",
@@ -297,13 +298,7 @@ DK <- function(k = 4, useC = TRUE)
   }
 
   f$hess$rho <- function(y, par, ...) {
-    ## y not needed for Fisher info (we integrate over categories), but
-    ## signature is fixed, so we still accept it.
-
-    alpha <- do.call("cbind", par[alpha_names])
-    if(k > 2L) {
-      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
-    }
+    alpha <- build_alpha(par)
 
     .Call(
       "hess_rho_dontknow",
@@ -311,6 +306,7 @@ DK <- function(k = 4, useC = TRUE)
       as.numeric(par$mu2),    # Eta2
       as.numeric(par$rho),    # rho (parameter scale)
       alpha,                  # n x mA alpha
+      y,
       PACKAGE = "dontknow"
     )
   }
@@ -319,10 +315,7 @@ DK <- function(k = 4, useC = TRUE)
   f$score$mu1 <- function(y, par, ...) {
     y <- as.matrix(y)
 
-    alpha <- do.call("cbind", par[alpha_names])
-    if(k > 2L) {
-      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
-    }
+    alpha <- build_alpha(par)
 
     .Call(
       "score_mu1_dontknow",
@@ -339,10 +332,7 @@ DK <- function(k = 4, useC = TRUE)
   f$score$mu2 <- function(y, par, ...) {
     y <- as.matrix(y)
 
-    alpha <- do.call("cbind", par[alpha_names])
-    if(k > 2L) {
-      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
-    }
+    alpha <- build_alpha(par)
 
     .Call(
       "score_mu2_dontknow",
@@ -357,12 +347,7 @@ DK <- function(k = 4, useC = TRUE)
 
   ## Hessian (Fisher info) wrt eta_mu1
   f$hess$mu1 <- function(y, par, ...) {
-    ## y is not needed for Fisher, covariates/parameters are enough.
-
-    alpha <- do.call("cbind", par[alpha_names])
-    if(k > 2L) {
-      alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
-    }
+    alpha <- build_alpha(par)
 
     .Call(
       "hess_mu1_dontknow",
@@ -370,13 +355,13 @@ DK <- function(k = 4, useC = TRUE)
       as.numeric(par$mu2),
       as.numeric(par$rho),
       alpha,
+      y,
       PACKAGE = "dontknow"
     )
   }
 
   ## Hessian (Fisher info) wrt eta_mu2
   f$hess$mu2 <- function(y, par, ...) {
-
     alpha <- do.call("cbind", par[alpha_names])
     if(k > 2L) {
       alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
@@ -388,6 +373,7 @@ DK <- function(k = 4, useC = TRUE)
       as.numeric(par$mu2),
       as.numeric(par$rho),
       alpha,
+      y,
       PACKAGE = "dontknow"
     )
   }
@@ -426,11 +412,29 @@ DK <- function(k = 4, useC = TRUE)
           as.numeric(par$mu2),
           as.numeric(par$rho),
           alpha,
+          y,
           as.integer(j),
           PACKAGE = "dontknow"
         )
       }
     })
+  }
+
+  f$z_weights <- function(y, eta, peta, j) {
+    y <- as.matrix(y)
+    alpha <- build_alpha_raw(peta)
+
+    .Call(
+      "z_weights_dontknow",
+      y,
+      as.numeric(eta),
+      as.numeric(peta$mu1),
+      as.numeric(peta$mu2),
+      as.numeric(peta$rho),
+      alpha,
+      as.character(j),
+      PACKAGE = "dontknow"
+    )
   }
 
   f$alpha <- build_alpha
@@ -447,6 +451,8 @@ DK <- function(k = 4, useC = TRUE)
     f$score <- NULL
   if(!useC[3L])
     f$hess <- NULL
+  if(!(useC[2L] && useC[3L]))
+    f$z_weights <- NULL
 
   class(f) <- "gamlss2.family"
   f
@@ -653,4 +659,3 @@ rqres_DK_ordinal <- function(object, ...)
 
   res
 }
-

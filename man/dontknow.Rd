@@ -11,7 +11,7 @@
 
 \usage{
 ## family function
-DK(k = 4, useC = TRUE)
+DK(k = 4, useC = c(TRUE, TRUE, TRUE))
 
 ## simulation function for DK(4)
 sim_DK(n = 1000, rho = NULL, shift = 0)
@@ -19,7 +19,9 @@ sim_DK(n = 1000, rho = NULL, shift = 0)
 
 \arguments{
   \item{k}{Integer, the number of levels of \code{y2}. Default is \code{k = 4}.}
-  \item{useC}{Logical, should the C version of the log-likelihood be used?}
+  \item{useC}{Logical or logical vector controlling use of compiled code for
+    the log-likelihood, score, and Hessian. The default
+    \code{c(TRUE, TRUE, TRUE)} enables the C implementations for all three.}
   \item{n}{Integer, number of observations to simulate.}
   \item{rho}{Numeric, the correlation parameter. If \code{rho = NULL}
     \code{rho} is a function of covariate \code{x3}.}

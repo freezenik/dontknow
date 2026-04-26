@@ -211,6 +211,704 @@ static inline double bvn_pdf(double h, double k, double rho)
     return pref * exp(-0.5 * quad);
 }
 
+/* derivative of bivariate standard normal pdf wrt rho */
+static inline double bvn_pdf_drho(double h, double k, double rho)
+{
+    if(!R_FINITE(h) || !R_FINITE(k))
+        return 0.0;
+
+    double r = rho;
+    if(r >=  1.0) r =  0.999999999;
+    if(r <= -1.0) r = -0.999999999;
+    double omr2 = 1.0 - r * r;
+    if(omr2 <= 0.0) return 0.0;
+
+    double cval = h * h - 2.0 * r * h * k + k * k;
+    double dlogphi = r / omr2 + (h * k * omr2 - r * cval) / (omr2 * omr2);
+
+    return bvn_pdf(h, k, r) * dlogphi;
+}
+
+static inline double dF_dh(double h, double k, double rho);
+static inline double dF_dk(double h, double k, double rho);
+static inline double d2F_dh2(double h, double k, double rho);
+static inline double d2F_dk2(double h, double k, double rho);
+
+static inline double clip_rho(double rho)
+{
+    double r = rho;
+    if(r >=  1.0) r =  0.999999999;
+    if(r <= -1.0) r = -0.999999999;
+    return r;
+}
+
+static inline double rhogit_eta(double rho)
+{
+    double r = clip_rho(rho);
+    double omr2 = 1.0 - r * r;
+    if(omr2 <= 0.0) omr2 = DBL_MIN;
+    return r / sqrt(omr2);
+}
+
+static inline double rhogit_linkinv(double eta)
+{
+    return eta / sqrt(1.0 + eta * eta);
+}
+
+static inline double rhogit_d2(double rho)
+{
+    double r = clip_rho(rho);
+    double omr2 = 1.0 - r * r;
+    if(omr2 <= 0.0) omr2 = DBL_MIN;
+    return -3.0 * r * omr2 * omr2;
+}
+
+static inline void dk_bounds(const double *A, int n, int mA, int i, int y2,
+                             double eta2i, double *B1, double *B2)
+{
+    if(y2 < 0)
+        error("y2 < 0 at row %d", i + 1);
+
+    if(y2 == 0) {
+        *B1 = R_NegInf;
+    } else {
+        const int colL = y2;
+        if(colL >= mA)
+            error("y2 too large for alpha at row %d (need column %d, have %d)",
+                  i + 1, colL + 1, mA);
+        *B1 = A[i + colL * n] - eta2i;
+    }
+
+    if(y2 + 1 >= mA) {
+        *B2 = R_PosInf;
+    } else {
+        const int colU = y2 + 1;
+        if(colU >= mA)
+            error("internal indexing error at row %d", i + 1);
+        *B2 = A[i + colU * n] - eta2i;
+    }
+}
+
+static inline double dk_rect_prob(double Aup, double B1, double B2, double rho, int steps)
+{
+    double p_up, p_lo;
+
+    if(!R_FINITE(B2) && B2 > 0.0) {
+        p_up = pnorm(Aup, 0.0, 1.0, 1, 0);
+    } else {
+        p_up = bvn_cdf_miwa(Aup, B2, rho, steps);
+    }
+
+    if(!R_FINITE(B1) && B1 < 0.0) {
+        p_lo = 0.0;
+    } else {
+        p_lo = bvn_cdf_miwa(Aup, B1, rho, steps);
+    }
+
+    double p = p_up - p_lo;
+    if(p < 0.0 && p > -1e-15)
+        p = 0.0;
+
+    return p;
+}
+
+static inline void dk_make_ordered_alpha(const double *Araw, double *Aord, int n, int mA)
+{
+    for(int i = 0; i < n; ++i) {
+        Aord[i + 0 * n] = Araw[i + 0 * n];
+        if(mA >= 2)
+            Aord[i + 1 * n] = Araw[i + 1 * n];
+        for(int j = 2; j < mA; ++j) {
+            Aord[i + j * n] = Aord[i + (j - 1) * n] + exp(Araw[i + j * n]);
+        }
+    }
+}
+
+static inline double score_rho_obs(double eta1i, double eta2i, double rhoi,
+                                   const double *A, int n, int mA, int i,
+                                   int y1, int y2, int steps)
+{
+    if(y1 == 1)
+        return 0.0;
+    if(y1 != 0)
+        error("y1 must be 0 or 1 at row %d", i + 1);
+
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+    double B1, B2;
+    dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p))
+        return 0.0;
+
+    double p_prime = bvn_pdf(Aup, B2, r) - bvn_pdf(Aup, B1, r);
+    return (p_prime / p) * rhogit_d1(r);
+}
+
+static inline double score_mu1_obs(double eta1i, double eta2i, double rhoi,
+                                   const double *A, int n, int mA, int i,
+                                   int y1, int y2, int steps)
+{
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+
+    if(y1 == 1) {
+        double p = pnorm(Aup, 0.0, 1.0, 0, 0);
+        if(p <= 0.0 || !R_FINITE(p))
+            return 0.0;
+        return dnorm(Aup, 0.0, 1.0, 0) / p;
+    }
+    if(y1 != 0)
+        error("y1 must be 0 or 1 at row %d", i + 1);
+
+    double B1, B2;
+    dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p))
+        return 0.0;
+
+    double dp = -(dF_dh(Aup, B2, r) - dF_dh(Aup, B1, r));
+    return dp / p;
+}
+
+static inline double score_mu2_obs(double eta1i, double eta2i, double rhoi,
+                                   const double *A, int n, int mA, int i,
+                                   int y1, int y2, int steps)
+{
+    if(y1 == 1)
+        return 0.0;
+    if(y1 != 0)
+        error("y1 must be 0 or 1 at row %d", i + 1);
+
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+    double B1, B2;
+    dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p))
+        return 0.0;
+
+    double dp = -dF_dk(Aup, B2, r) + dF_dk(Aup, B1, r);
+    return dp / p;
+}
+
+static inline double score_alpha_obs(double eta1i, double eta2i, double rhoi,
+                                     const double *A, int n, int mA, int i,
+                                     int y1, int y2, int jcol, int steps)
+{
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+
+    if(jcol == 1) {
+        if(y1 == 1) {
+            double p = pnorm(Aup, 0.0, 1.0, 0, 0);
+            if(p <= 0.0 || !R_FINITE(p))
+                return 0.0;
+            return -dnorm(Aup, 0.0, 1.0, 0) / p;
+        }
+        if(y1 != 0)
+            error("y1 must be 0 or 1 at row %d", i + 1);
+
+        double B1, B2;
+        dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+        double p = dk_rect_prob(Aup, B1, B2, r, steps);
+        if(p <= 0.0 || !R_FINITE(p))
+            return 0.0;
+
+        return (dF_dh(Aup, B2, r) - dF_dh(Aup, B1, r)) / p;
+    }
+
+    if(y1 == 1)
+        return 0.0;
+    if(y1 != 0)
+        error("y1 must be 0 or 1 at row %d", i + 1);
+
+    int c = y2;
+    double B1, B2;
+    dk_bounds(A, n, mA, i, c, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p))
+        return 0.0;
+
+    double scale = 1.0;
+    if(jcol >= 3)
+        scale = A[i + (jcol - 1) * n] - A[i + (jcol - 2) * n];
+
+    double dp = 0.0;
+    if(c >= 1 && jcol <= c + 1)
+        dp += -scale * dF_dk(Aup, B1, r);
+    if(c + 1 < mA && jcol <= c + 2)
+        dp += scale * dF_dk(Aup, B2, r);
+
+    return dp / p;
+}
+
+static inline double hess_mu1_obs(double eta1i, double eta2i, double rhoi,
+                                  const double *A, int n, int mA, int i,
+                                  int y1, int y2, int steps)
+{
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+
+    if(y1 == 1) {
+        double p = pnorm(Aup, 0.0, 1.0, 0, 0);
+        double phiA = dnorm(Aup, 0.0, 1.0, 0);
+        double p2 = Aup * phiA;
+        if(p <= 0.0 || !R_FINITE(p))
+            return 0.0;
+        return (phiA * phiA) / (p * p) - p2 / p;
+    }
+
+    double B1, B2;
+    dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p))
+        return 0.0;
+
+    double Dh = dF_dh(Aup, B2, r) - dF_dh(Aup, B1, r);
+    double Dhh = d2F_dh2(Aup, B2, r) - d2F_dh2(Aup, B1, r);
+    return (Dh * Dh) / (p * p) - Dhh / p;
+}
+
+static inline double hess_mu2_obs(double eta1i, double eta2i, double rhoi,
+                                  const double *A, int n, int mA, int i,
+                                  int y1, int y2, int steps)
+{
+    if(y1 == 1)
+        return 0.0;
+
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+    double B1, B2;
+    dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p))
+        return 0.0;
+
+    double Dk = -dF_dk(Aup, B2, r) + dF_dk(Aup, B1, r);
+    double Dkk = d2F_dk2(Aup, B2, r) - d2F_dk2(Aup, B1, r);
+    return (Dk * Dk) / (p * p) - Dkk / p;
+}
+
+static inline double hess_rho_obs(double eta1i, double eta2i, double rhoi,
+                                  const double *A, int n, int mA, int i,
+                                  int y1, int y2, int steps)
+{
+    if(y1 == 1)
+        return 0.0;
+
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+    double B1, B2;
+    dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p))
+        return 0.0;
+
+    double q = bvn_pdf(Aup, B2, r) - bvn_pdf(Aup, B1, r);
+    double qr = bvn_pdf_drho(Aup, B2, r) - bvn_pdf_drho(Aup, B1, r);
+    double d1 = rhogit_d1(r);
+    double d2 = rhogit_d2(r);
+
+    return d1 * d1 * ((q * q) / (p * p) - qr / p) - d2 * q / p;
+}
+
+static inline double hess_alpha_obs(double eta1i, double eta2i, double rhoi,
+                                    const double *A, int n, int mA, int i,
+                                    int y1, int y2, int jcol, int steps)
+{
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+
+    if(jcol == 1) {
+        if(y1 == 1) {
+            double p = pnorm(Aup, 0.0, 1.0, 0, 0);
+            double phiA = dnorm(Aup, 0.0, 1.0, 0);
+            double p2 = Aup * phiA;
+            if(p <= 0.0 || !R_FINITE(p))
+                return 0.0;
+            return (phiA * phiA) / (p * p) - p2 / p;
+        }
+
+        double B1, B2;
+        dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+        double p = dk_rect_prob(Aup, B1, B2, r, steps);
+        if(p <= 0.0 || !R_FINITE(p))
+            return 0.0;
+
+        double Dh = dF_dh(Aup, B2, r) - dF_dh(Aup, B1, r);
+        double Dhh = d2F_dh2(Aup, B2, r) - d2F_dh2(Aup, B1, r);
+        return (Dh * Dh) / (p * p) - Dhh / p;
+    }
+
+    if(y1 == 1)
+        return 0.0;
+
+    int c = y2;
+    double B1, B2;
+    dk_bounds(A, n, mA, i, c, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p))
+        return 0.0;
+
+    double scale = 1.0;
+    double accel = 0.0;
+    if(jcol >= 3) {
+        scale = A[i + (jcol - 1) * n] - A[i + (jcol - 2) * n];
+        accel = scale;
+    }
+
+    double s1 = 0.0, s2 = 0.0, u1 = 0.0, u2 = 0.0;
+    if(c >= 1 && jcol <= c + 1) {
+        s1 = scale;
+        u1 = accel;
+    }
+    if(c + 1 < mA && jcol <= c + 2) {
+        s2 = scale;
+        u2 = accel;
+    }
+
+    double p1 = s2 * dF_dk(Aup, B2, r) - s1 * dF_dk(Aup, B1, r);
+    double p2 = u2 * dF_dk(Aup, B2, r) + s2 * s2 * d2F_dk2(Aup, B2, r)
+              - u1 * dF_dk(Aup, B1, r) - s1 * s1 * d2F_dk2(Aup, B1, r);
+
+    return (p1 * p1) / (p * p) - p2 / p;
+}
+
+static inline double sanitize_score(double x)
+{
+    const double eps = 1.490116e-08;
+
+    if(ISNA(x))
+        x = eps;
+    if(x > 1e10)
+        x = 1e10;
+    if(x < -1e10)
+        x = -1e10;
+
+    return x;
+}
+
+static inline double sanitize_weight(double x)
+{
+    const double eps = 1.490116e-08;
+
+    if(x == 0.0 || !R_FINITE(x))
+        x = eps;
+    if(x > 1e10)
+        x = 1e10;
+    if(x < 0.0)
+        x = -x;
+    if(x < 1e-10)
+        x = 1e-10;
+
+    return x;
+}
+
+static inline void zw_mu1_obs(double eta1i, double eta2i, double rhoi,
+                              const double *A, int n, int mA, int i,
+                              int y1, int y2, int steps,
+                              double *score, double *hess)
+{
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+
+    if(y1 == 1) {
+        double p = pnorm(Aup, 0.0, 1.0, 0, 0);
+        double phiA = dnorm(Aup, 0.0, 1.0, 0);
+        double p2 = Aup * phiA;
+
+        if(p <= 0.0 || !R_FINITE(p)) {
+            *score = 0.0;
+            *hess = 0.0;
+            return;
+        }
+
+        *score = phiA / p;
+        *hess = (phiA * phiA) / (p * p) - p2 / p;
+        return;
+    }
+
+    if(y1 != 0)
+        error("y1 must be 0 or 1 at row %d", i + 1);
+
+    double B1, B2;
+    dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p)) {
+        *score = 0.0;
+        *hess = 0.0;
+        return;
+    }
+
+    double Dh = dF_dh(Aup, B2, r) - dF_dh(Aup, B1, r);
+    double Dhh = d2F_dh2(Aup, B2, r) - d2F_dh2(Aup, B1, r);
+    *score = -Dh / p;
+    *hess = (Dh * Dh) / (p * p) - Dhh / p;
+}
+
+static inline void zw_mu2_obs(double eta1i, double eta2i, double rhoi,
+                              const double *A, int n, int mA, int i,
+                              int y1, int y2, int steps,
+                              double *score, double *hess)
+{
+    if(y1 == 1) {
+        *score = 0.0;
+        *hess = 0.0;
+        return;
+    }
+
+    if(y1 != 0)
+        error("y1 must be 0 or 1 at row %d", i + 1);
+
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+    double B1, B2;
+    dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p)) {
+        *score = 0.0;
+        *hess = 0.0;
+        return;
+    }
+
+    double Dk = -dF_dk(Aup, B2, r) + dF_dk(Aup, B1, r);
+    double Dkk = d2F_dk2(Aup, B2, r) - d2F_dk2(Aup, B1, r);
+    *score = Dk / p;
+    *hess = (Dk * Dk) / (p * p) - Dkk / p;
+}
+
+static inline void zw_rho_obs(double eta1i, double eta2i, double rhoi,
+                              const double *A, int n, int mA, int i,
+                              int y1, int y2, int steps,
+                              double *score, double *hess)
+{
+    if(y1 == 1) {
+        *score = 0.0;
+        *hess = 0.0;
+        return;
+    }
+
+    if(y1 != 0)
+        error("y1 must be 0 or 1 at row %d", i + 1);
+
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+    double B1, B2;
+    dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p)) {
+        *score = 0.0;
+        *hess = 0.0;
+        return;
+    }
+
+    double q = bvn_pdf(Aup, B2, r) - bvn_pdf(Aup, B1, r);
+    double qr = bvn_pdf_drho(Aup, B2, r) - bvn_pdf_drho(Aup, B1, r);
+    double d1 = rhogit_d1(r);
+    double d2 = rhogit_d2(r);
+
+    *score = (q / p) * d1;
+    *hess = d1 * d1 * ((q * q) / (p * p) - qr / p) - d2 * q / p;
+}
+
+static inline void zw_alpha_obs(double eta1i, double eta2i, double rhoi,
+                                const double *A, int n, int mA, int i,
+                                int y1, int y2, int jcol, int steps,
+                                double *score, double *hess)
+{
+    double r = clip_rho(rhoi);
+    double Aup = A[i + 0 * n] - eta1i;
+
+    if(jcol == 1) {
+        if(y1 == 1) {
+            double p = pnorm(Aup, 0.0, 1.0, 0, 0);
+            double phiA = dnorm(Aup, 0.0, 1.0, 0);
+            double p2 = Aup * phiA;
+
+            if(p <= 0.0 || !R_FINITE(p)) {
+                *score = 0.0;
+                *hess = 0.0;
+                return;
+            }
+
+            *score = -phiA / p;
+            *hess = (phiA * phiA) / (p * p) - p2 / p;
+            return;
+        }
+
+        if(y1 != 0)
+            error("y1 must be 0 or 1 at row %d", i + 1);
+
+        double B1, B2;
+        dk_bounds(A, n, mA, i, y2, eta2i, &B1, &B2);
+        double p = dk_rect_prob(Aup, B1, B2, r, steps);
+        if(p <= 0.0 || !R_FINITE(p)) {
+            *score = 0.0;
+            *hess = 0.0;
+            return;
+        }
+
+        double Dh = dF_dh(Aup, B2, r) - dF_dh(Aup, B1, r);
+        double Dhh = d2F_dh2(Aup, B2, r) - d2F_dh2(Aup, B1, r);
+        *score = Dh / p;
+        *hess = (Dh * Dh) / (p * p) - Dhh / p;
+        return;
+    }
+
+    if(y1 == 1) {
+        *score = 0.0;
+        *hess = 0.0;
+        return;
+    }
+
+    if(y1 != 0)
+        error("y1 must be 0 or 1 at row %d", i + 1);
+
+    int c = y2;
+    double B1, B2;
+    dk_bounds(A, n, mA, i, c, eta2i, &B1, &B2);
+    double p = dk_rect_prob(Aup, B1, B2, r, steps);
+    if(p <= 0.0 || !R_FINITE(p)) {
+        *score = 0.0;
+        *hess = 0.0;
+        return;
+    }
+
+    double scale = 1.0;
+    double accel = 0.0;
+    if(jcol >= 3) {
+        scale = A[i + (jcol - 1) * n] - A[i + (jcol - 2) * n];
+        accel = scale;
+    }
+
+    double s1 = 0.0, s2 = 0.0, u1 = 0.0, u2 = 0.0;
+    if(c >= 1 && jcol <= c + 1) {
+        s1 = scale;
+        u1 = accel;
+    }
+    if(c + 1 < mA && jcol <= c + 2) {
+        s2 = scale;
+        u2 = accel;
+    }
+
+    double p1 = s2 * dF_dk(Aup, B2, r) - s1 * dF_dk(Aup, B1, r);
+    double p2 = u2 * dF_dk(Aup, B2, r) + s2 * s2 * d2F_dk2(Aup, B2, r)
+              - u1 * dF_dk(Aup, B1, r) - s1 * s1 * d2F_dk2(Aup, B1, r);
+
+    *score = p1 / p;
+    *hess = (p1 * p1) / (p * p) - p2 / p;
+}
+
+SEXP z_weights_dontknow(SEXP Y, SEXP Eta, SEXP Mu1, SEXP Mu2,
+                        SEXP Rho, SEXP Alpha, SEXP J)
+{
+    Y     = PROTECT(coerceVector(Y,     INTSXP));
+    Eta   = PROTECT(coerceVector(Eta,   REALSXP));
+    Mu1   = PROTECT(coerceVector(Mu1,   REALSXP));
+    Mu2   = PROTECT(coerceVector(Mu2,   REALSXP));
+    Rho   = PROTECT(coerceVector(Rho,   REALSXP));
+    Alpha = PROTECT(coerceVector(Alpha, REALSXP));
+    J     = PROTECT(coerceVector(J,     STRSXP));
+
+    const double *eta  = REAL(Eta);
+    const double *mu1  = REAL(Mu1);
+    const double *mu2  = REAL(Mu2);
+    const double *rhoV = REAL(Rho);
+    const double *Araw = REAL(Alpha);
+    const int    *Yp   = INTEGER(Y);
+
+    SEXP dimA = getAttrib(Alpha, R_DimSymbol);
+    SEXP dimY = getAttrib(Y,     R_DimSymbol);
+    if(TYPEOF(dimA) != INTSXP || TYPEOF(dimY) != INTSXP)
+        error("alpha and y must have dim attributes");
+
+    const int n   = INTEGER(dimA)[0];
+    const int mA  = INTEGER(dimA)[1];
+    const int nY  = INTEGER(dimY)[0];
+    const int mY  = INTEGER(dimY)[1];
+
+    if(nY != n || mY != 2)
+        error("y must be an n x 2 matrix");
+    if(mA < 2)
+        error("alpha must have at least two columns");
+    if(XLENGTH(Eta) != (R_xlen_t)n ||
+       XLENGTH(Mu1) != (R_xlen_t)n ||
+       XLENGTH(Mu2) != (R_xlen_t)n)
+        error("eta, mu1 and mu2 must have length n");
+
+    const R_xlen_t nRho = XLENGTH(Rho);
+    if(nRho != 1 && nRho != (R_xlen_t)n)
+        warning("rho length (%ld) not equal to n (%d); recycling will be used",
+                (long)nRho, n);
+
+    double *Awork = (double *) R_alloc((size_t) n * (size_t) mA, sizeof(double));
+    dk_make_ordered_alpha(Araw, Awork, n, mA);
+
+    const char *k = CHAR(STRING_ELT(J, 0));
+    int which = 0;
+    int jcol = 0;
+
+    if(strcmp(k, "mu1") == 0) {
+        which = 1;
+    } else if(strcmp(k, "mu2") == 0) {
+        which = 2;
+    } else if(strcmp(k, "rho") == 0) {
+        which = 3;
+    } else if(strncmp(k, "alpha", 5) == 0) {
+        which = 4;
+        jcol = atoi(k + 5);
+        if(jcol < 1 || jcol > mA)
+            error("alpha index out of range in z_weights_dontknow()");
+    } else {
+        error("unsupported parameter '%s' in z_weights_dontknow()", k);
+    }
+
+    SEXP z = PROTECT(allocVector(REALSXP, n));
+    SEXP weights = PROTECT(allocVector(REALSXP, n));
+
+    double *zptr = REAL(z);
+    double *wptr = REAL(weights);
+
+    const int steps = 64;
+
+    for(int i = 0; i < n; ++i) {
+        const int y1 = Yp[i + 0 * n];
+        const int y2 = Yp[i + 1 * n];
+        const double rhoi = rhoV[(nRho == 1) ? 0 : i];
+        double score = 0.0;
+        double hess = 0.0;
+
+        if(which == 1) {
+            zw_mu1_obs(mu1[i], mu2[i], rhoi, Awork, n, mA, i, y1, y2, steps, &score, &hess);
+        } else if(which == 2) {
+            zw_mu2_obs(mu1[i], mu2[i], rhoi, Awork, n, mA, i, y1, y2, steps, &score, &hess);
+        } else if(which == 3) {
+            zw_rho_obs(mu1[i], mu2[i], rhoi, Awork, n, mA, i, y1, y2, steps, &score, &hess);
+        } else {
+            zw_alpha_obs(mu1[i], mu2[i], rhoi, Awork, n, mA, i, y1, y2, jcol, steps, &score, &hess);
+        }
+
+        score = sanitize_score(score);
+        hess = sanitize_weight(hess);
+        wptr[i] = hess;
+        zptr[i] = eta[i] + score / hess;
+    }
+
+    SEXP out = PROTECT(allocVector(VECSXP, 2));
+    SET_VECTOR_ELT(out, 0, z);
+    SET_VECTOR_ELT(out, 1, weights);
+
+    SEXP names = PROTECT(allocVector(STRSXP, 2));
+    SET_STRING_ELT(names, 0, mkChar("z"));
+    SET_STRING_ELT(names, 1, mkChar("weights"));
+    setAttrib(out, R_NamesSymbol, names);
+
+    UNPROTECT(11);
+    return out;
+}
+
 /* ---------------------------------------------------------------------- */
 /* .Call interface:
  *
@@ -353,31 +1051,33 @@ SEXP score_rho_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha, SEXP Y)
  *
  *   hess_rho_dontknow(Eta1, Eta2, Rho, Alpha)
  *
- * Returns Fisher information (expected negative Hessian) wrt predictor
- * eta_rho, i.e. per observation weight > 0.
- *
- * For each obs i:
- *   I_rho[i]  = sum_c (p'_c^2 / p_c),  over c=0..K-1
- *   I_eta[i]  = (d rho / d eta)^2 * I_rho[i]
+ * Returns observed negative second derivatives wrt eta_rho.
  */
-SEXP hess_rho_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha)
+SEXP hess_rho_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha, SEXP Y)
 {
     Eta1  = PROTECT(coerceVector(Eta1,  REALSXP));
     Eta2  = PROTECT(coerceVector(Eta2,  REALSXP));
     Rho   = PROTECT(coerceVector(Rho,   REALSXP));
     Alpha = PROTECT(coerceVector(Alpha, REALSXP));
+    Y     = PROTECT(coerceVector(Y,     INTSXP));
 
     const double *eta1 = REAL(Eta1);
     const double *eta2 = REAL(Eta2);
     const double *rhoV = REAL(Rho);
     const double *A    = REAL(Alpha);
+    const int    *Yp   = INTEGER(Y);
 
     SEXP dimA = getAttrib(Alpha, R_DimSymbol);
-    if(TYPEOF(dimA) != INTSXP)
-        error("alpha must have dim attributes");
+    SEXP dimY = getAttrib(Y,     R_DimSymbol);
+    if(TYPEOF(dimA) != INTSXP || TYPEOF(dimY) != INTSXP)
+        error("alpha and y must have dim attributes");
 
     const int n   = INTEGER(dimA)[0];
     const int mA  = INTEGER(dimA)[1];
+    const int nY  = INTEGER(dimY)[0];
+    const int mY  = INTEGER(dimY)[1];
+    if(nY != n || mY != 2)
+        error("y must be an n x 2 matrix");
     if(mA < 2)
         error("alpha must have at least two columns");
     if(XLENGTH(Eta1) != (R_xlen_t)n || XLENGTH(Eta2) != (R_xlen_t)n)
@@ -388,89 +1088,19 @@ SEXP hess_rho_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha)
         warning("rho length (%ld) not equal to n (%d); recycling will be used",
                 (long)nRho, n);
 
-    const int K     = mA - 1;  /* number of ordinal categories */
     const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *w = REAL(out);
 
     for(int i = 0; i < n; ++i) {
-        const double rraw = rhoV[(nRho == 1) ? 0 : i];
-        double r = rraw;
-        if(r >=  1.0) r =  0.999999999;
-        if(r <= -1.0) r = -0.999999999;
-
-        /* A = alpha1 - eta1 */
-        const double a1 = A[i + 0*n];
-        const double Aup = a1 - eta1[i];
-
-        double I_rho = 0.0;
-
-        /* loop over ordinal categories c = 0..K-1 */
-        for(int c = 0; c < K; ++c) {
-            double B1, B2;
-
-            /* replicate alpha2 = c(-Inf, alpha2..alphaK, +Inf) indexing
-             * B1 = alpha2[c+1] - eta2, B2 = alpha2[c+2] - eta2
-             */
-            if(c == 0) {
-                B1 = R_NegInf;
-            } else {
-                /* alpha2[c+1] = alpha[i, c+1] (1-based), 0-based col index c */
-                if(c >= mA)
-                    error("internal indexing error in hess_rho_dontknow (B1) at row %d", i+1);
-                B1 = A[i + c * n] - eta2[i];
-            }
-
-            if(c + 1 >= K) {
-                /* top category -> +Inf */
-                B2 = R_PosInf;
-            } else {
-                /* alpha2[c+2] = alpha[i, c+2] -> 0-based col index (c+1) */
-                int colU = c + 1;
-                if(colU >= mA)
-                    error("internal indexing error in hess_rho_dontknow (B2) at row %d", i+1);
-                B2 = A[i + colU * n] - eta2[i];
-            }
-
-            /* p_c = F(Aup,B2) - F(Aup,B1) */
-            double p_up, p_lo;
-            if(!R_FINITE(B2) && B2 > 0.0) {
-                p_up = pnorm(Aup, 0.0, 1.0, 1, 0);
-            } else {
-                p_up = bvn_cdf_miwa(Aup, B2, r, steps);
-            }
-            if(!R_FINITE(B1) && B1 < 0.0) {
-                p_lo = 0.0;
-            } else {
-                p_lo = bvn_cdf_miwa(Aup, B1, r, steps);
-            }
-
-            double p_c = p_up - p_lo;
-            if(p_c < 0.0 && p_c > -1e-15)
-                p_c = 0.0;
-
-            if(p_c <= 0.0 || !R_FINITE(p_c))
-                continue;
-
-            /* p'_c = phi2(Aup,B2;r) - phi2(Aup,B1;r) */
-            double phi_up = bvn_pdf(Aup, B2, r);
-            double phi_lo = bvn_pdf(Aup, B1, r);
-            double p_prime_c = phi_up - phi_lo;
-
-            I_rho += (p_prime_c * p_prime_c) / p_c;
-        }
-
-        /* transform to eta_rho-scale: I_eta = (d rho / d eta)^2 * I_rho */
-        double d1 = rhogit_d1(r);
-        double w_i = d1 * d1 * I_rho;
-        if(!R_FINITE(w_i) || w_i <= 0.0)
-            w_i = 1e-6;
-
-        w[i] = w_i;
+        const int y1 = Yp[i + 0*n];
+        const int y2 = Yp[i + 1*n];
+        w[i] = hess_rho_obs(eta1[i], eta2[i], rhoV[(nRho == 1) ? 0 : i],
+                            A, n, mA, i, y1, y2, steps);
     }
 
-    UNPROTECT(5);
+    UNPROTECT(6);
     return out;
 }
 
@@ -524,6 +1154,49 @@ static inline double dF_dk(double h, double k, double rho)
     double Phi_z = pnorm(z, 0.0, 1.0, 1, 0);
 
     return phi_k * Phi_z;
+}
+
+/* second derivative wrt first argument h */
+static inline double d2F_dh2(double h, double k, double rho)
+{
+    if(!R_FINITE(h))
+        return 0.0;
+
+    double r = clip_rho(rho);
+    double omr2 = 1.0 - r * r;
+    if(omr2 <= 0.0) omr2 = DBL_MIN;
+    double s = sqrt(omr2);
+    double phi_h = dnorm(h, 0.0, 1.0, 0);
+
+    if(!R_FINITE(k)) {
+        if(k > 0.0)
+            return -h * phi_h;
+        return 0.0;
+    }
+
+    double z = (k - r * h) / s;
+    double Phi_z = pnorm(z, 0.0, 1.0, 1, 0);
+    double phi_z = dnorm(z, 0.0, 1.0, 0);
+
+    return phi_h * (-h * Phi_z - (r / s) * phi_z);
+}
+
+/* second derivative wrt second argument k */
+static inline double d2F_dk2(double h, double k, double rho)
+{
+    if(!R_FINITE(k))
+        return 0.0;
+
+    double r = clip_rho(rho);
+    double omr2 = 1.0 - r * r;
+    if(omr2 <= 0.0) omr2 = DBL_MIN;
+    double s = sqrt(omr2);
+    double phi_k = dnorm(k, 0.0, 1.0, 0);
+    double z = (h - r * k) / s;
+    double Phi_z = pnorm(z, 0.0, 1.0, 1, 0);
+    double phi_z = dnorm(z, 0.0, 1.0, 0);
+
+    return phi_k * (-k * Phi_z - (r / s) * phi_z);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -786,33 +1459,37 @@ SEXP score_mu2_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha, SEXP Y)
 }
 
 /* ---------------------------------------------------------------------- */
-/* HESSIAN (Fisher info) wrt eta_mu1
+/* HESSIAN (observed) wrt eta_mu1
  *
  * .Call:
  *   hess_mu1_dontknow(Eta1, Eta2, Rho, Alpha)
  *
- * For each i:
- *   I_mu1,i = (p'_dk^2 / p_dk) + sum_c (p'_c^2 / p_c), where derivatives
- *   are wrt mu1. Identity link: Hessian weight = I_mu1,i.
  */
-SEXP hess_mu1_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha)
+SEXP hess_mu1_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha, SEXP Y)
 {
     Eta1  = PROTECT(coerceVector(Eta1,  REALSXP));
     Eta2  = PROTECT(coerceVector(Eta2,  REALSXP));
     Rho   = PROTECT(coerceVector(Rho,   REALSXP));
     Alpha = PROTECT(coerceVector(Alpha, REALSXP));
+    Y     = PROTECT(coerceVector(Y,     INTSXP));
 
     const double *eta1 = REAL(Eta1);
     const double *eta2 = REAL(Eta2);
     const double *rhoV = REAL(Rho);
     const double *A    = REAL(Alpha);
+    const int    *Yp   = INTEGER(Y);
 
     SEXP dimA = getAttrib(Alpha, R_DimSymbol);
-    if(TYPEOF(dimA) != INTSXP)
-        error("alpha must have dim attributes");
+    SEXP dimY = getAttrib(Y,     R_DimSymbol);
+    if(TYPEOF(dimA) != INTSXP || TYPEOF(dimY) != INTSXP)
+        error("alpha and y must have dim attributes");
 
     const int n   = INTEGER(dimA)[0];
     const int mA  = INTEGER(dimA)[1];
+    const int nY  = INTEGER(dimY)[0];
+    const int mY  = INTEGER(dimY)[1];
+    if(nY != n || mY != 2)
+        error("y must be an n x 2 matrix");
     if(mA < 2)
         error("alpha must have at least two columns");
     if(XLENGTH(Eta1) != (R_xlen_t)n || XLENGTH(Eta2) != (R_xlen_t)n)
@@ -823,114 +1500,54 @@ SEXP hess_mu1_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha)
         warning("rho length (%ld) not equal to n (%d); recycling will be used",
                 (long)nRho, n);
 
-    const int K     = mA - 1;  /* number of ordinal categories */
     const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *w = REAL(out);
 
     for(int i = 0; i < n; ++i) {
-        const double rraw = rhoV[(nRho == 1) ? 0 : i];
-        double r = rraw;
-        if(r >=  1.0) r =  0.999999999;
-        if(r <= -1.0) r = -0.999999999;
-
-        const double alpha1_i = A[i + 0*n];
-        const double Aup = alpha1_i - eta1[i];
-
-        double I_mu1 = 0.0;
-
-        /* dk cell: Y1=1, prob p_dk = 1 - Phi(Aup), dp_dmu1 = phi(Aup) */
-        double p_dk = pnorm(Aup, 0.0, 1.0, 0, 0);
-        if(p_dk > 0.0 && R_FINITE(p_dk)) {
-            double phiA = dnorm(Aup, 0.0, 1.0, 0);
-            double dp_dmu1 = phiA;
-            I_mu1 += (dp_dmu1 * dp_dmu1) / p_dk;
-        }
-
-        /* Y1=0, Y2=c for c=0..K-1 */
-        for(int c = 0; c < K; ++c) {
-            double B1, B2;
-
-            if(c == 0) {
-                B1 = R_NegInf;
-            } else {
-                if(c >= mA)
-                    error("internal indexing error in hess_mu1_dontknow (B1) at row %d",
-                          i+1);
-                B1 = A[i + c * n] - eta2[i];
-            }
-
-            if(c + 1 >= K) {
-                B2 = R_PosInf;
-            } else {
-                int colU = c + 1;
-                if(colU >= mA)
-                    error("internal indexing error in hess_mu1_dontknow (B2) at row %d",
-                          i+1);
-                B2 = A[i + colU * n] - eta2[i];
-            }
-
-            double p_up, p_lo;
-            if(!R_FINITE(B2) && B2 > 0.0) {
-                p_up = pnorm(Aup, 0.0, 1.0, 1, 0);
-            } else {
-                p_up = bvn_cdf_miwa(Aup, B2, r, steps);
-            }
-            if(!R_FINITE(B1) && B1 < 0.0) {
-                p_lo = 0.0;
-            } else {
-                p_lo = bvn_cdf_miwa(Aup, B1, r, steps);
-            }
-
-            double p_c = p_up - p_lo;
-            if(p_c < 0.0 && p_c > -1e-15) p_c = 0.0;
-            if(p_c <= 0.0 || !R_FINITE(p_c)) continue;
-
-            /* dp_c/d mu1 = -[dF/dh(A,B2;r) - dF/dh(A,B1;r)] */
-            double dF2 = dF_dh(Aup, B2, r);
-            double dF1 = dF_dh(Aup, B1, r);
-            double dp_c = -(dF2 - dF1);
-
-            I_mu1 += (dp_c * dp_c) / p_c;
-        }
-
-        double w_i = I_mu1;
-        if(!R_FINITE(w_i) || w_i <= 0.0) w_i = 1e-6;
-        w[i] = w_i;
+        const int y1 = Yp[i + 0*n];
+        const int y2 = Yp[i + 1*n];
+        w[i] = hess_mu1_obs(eta1[i], eta2[i], rhoV[(nRho == 1) ? 0 : i],
+                            A, n, mA, i, y1, y2, steps);
     }
 
-    UNPROTECT(5);
+    UNPROTECT(6);
     return out;
 }
 
 /* ---------------------------------------------------------------------- */
-/* HESSIAN (Fisher info) wrt eta_mu2
+/* HESSIAN (observed) wrt eta_mu2
  *
  * .Call:
  *   hess_mu2_dontknow(Eta1, Eta2, Rho, Alpha)
  *
- * For each i:
- *   I_mu2,i = sum_c (p'_c^2 / p_c), derivatives wrt mu2, Y1=1 has no term.
  */
-SEXP hess_mu2_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha)
+SEXP hess_mu2_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha, SEXP Y)
 {
     Eta1  = PROTECT(coerceVector(Eta1,  REALSXP));
     Eta2  = PROTECT(coerceVector(Eta2,  REALSXP));
     Rho   = PROTECT(coerceVector(Rho,   REALSXP));
     Alpha = PROTECT(coerceVector(Alpha, REALSXP));
+    Y     = PROTECT(coerceVector(Y,     INTSXP));
 
     const double *eta1 = REAL(Eta1);
     const double *eta2 = REAL(Eta2);
     const double *rhoV = REAL(Rho);
     const double *A    = REAL(Alpha);
+    const int    *Yp   = INTEGER(Y);
 
     SEXP dimA = getAttrib(Alpha, R_DimSymbol);
-    if(TYPEOF(dimA) != INTSXP)
-        error("alpha must have dim attributes");
+    SEXP dimY = getAttrib(Y,     R_DimSymbol);
+    if(TYPEOF(dimA) != INTSXP || TYPEOF(dimY) != INTSXP)
+        error("alpha and y must have dim attributes");
 
     const int n   = INTEGER(dimA)[0];
     const int mA  = INTEGER(dimA)[1];
+    const int nY  = INTEGER(dimY)[0];
+    const int mY  = INTEGER(dimY)[1];
+    if(nY != n || mY != 2)
+        error("y must be an n x 2 matrix");
     if(mA < 2)
         error("alpha must have at least two columns");
     if(XLENGTH(Eta1) != (R_xlen_t)n || XLENGTH(Eta2) != (R_xlen_t)n)
@@ -941,77 +1558,19 @@ SEXP hess_mu2_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho, SEXP Alpha)
         warning("rho length (%ld) not equal to n (%d); recycling will be used",
                 (long)nRho, n);
 
-    const int K     = mA - 1;
     const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *w = REAL(out);
 
     for(int i = 0; i < n; ++i) {
-        const double rraw = rhoV[(nRho == 1) ? 0 : i];
-        double r = rraw;
-        if(r >=  1.0) r =  0.999999999;
-        if(r <= -1.0) r = -0.999999999;
-
-        const double alpha1_i = A[i + 0*n];
-        const double Aup = alpha1_i - eta1[i];
-
-        double I_mu2 = 0.0;
-
-        /* Y1=1 has no mu2 dependence -> no term */
-
-        for(int c = 0; c < K; ++c) {
-            double B1, B2;
-
-            if(c == 0) {
-                B1 = R_NegInf;
-            } else {
-                if(c >= mA)
-                    error("internal indexing error in hess_mu2_dontknow (B1) at row %d",
-                          i+1);
-                B1 = A[i + c * n] - eta2[i];
-            }
-
-            if(c + 1 >= K) {
-                B2 = R_PosInf;
-            } else {
-                int colU = c + 1;
-                if(colU >= mA)
-                    error("internal indexing error in hess_mu2_dontknow (B2) at row %d",
-                          i+1);
-                B2 = A[i + colU * n] - eta2[i];
-            }
-
-            double p_up, p_lo;
-            if(!R_FINITE(B2) && B2 > 0.0) {
-                p_up = pnorm(Aup, 0.0, 1.0, 1, 0);
-            } else {
-                p_up = bvn_cdf_miwa(Aup, B2, r, steps);
-            }
-            if(!R_FINITE(B1) && B1 < 0.0) {
-                p_lo = 0.0;
-            } else {
-                p_lo = bvn_cdf_miwa(Aup, B1, r, steps);
-            }
-
-            double p_c = p_up - p_lo;
-            if(p_c < 0.0 && p_c > -1e-15) p_c = 0.0;
-            if(p_c <= 0.0 || !R_FINITE(p_c)) continue;
-
-            /* dp_c/d mu2 = -dF/dk(A,B2;r) + dF/dk(A,B1;r) */
-            double dF2 = dF_dk(Aup, B2, r);
-            double dF1 = dF_dk(Aup, B1, r);
-            double dp_c = -dF2 + dF1;
-
-            I_mu2 += (dp_c * dp_c) / p_c;
-        }
-
-        double w_i = I_mu2;
-        if(!R_FINITE(w_i) || w_i <= 0.0) w_i = 1e-6;
-        w[i] = w_i;
+        const int y1 = Yp[i + 0*n];
+        const int y2 = Yp[i + 1*n];
+        w[i] = hess_mu2_obs(eta1[i], eta2[i], rhoV[(nRho == 1) ? 0 : i],
+                            A, n, mA, i, y1, y2, steps);
     }
 
-    UNPROTECT(5);
+    UNPROTECT(6);
     return out;
 }
 
@@ -1194,16 +1753,27 @@ SEXP score_alpha_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho,
             sc[i] = 0.0;
         } else {
             double dp = 0.0;
+            double scale = 1.0;
 
-            /* alpha_j acts as lower bound for category c when j == c+1 and c>=1 */
-            if(c >= 1 && jcol == c + 1) {
-                dp += -dF_dk(Aup, B1, r);
+            /* alpha2 is the baseline ordinal cut; alpha3..alphaK parameterize
+             * positive increments, so the derivative wrt the raw parameter is
+             * the derivative wrt every downstream cut times exp(delta_j),
+             * which equals the adjacent cut distance on the monotone scale.
+             */
+            if(jcol >= 3) {
+                scale = A[i + (jcol - 1) * n] - A[i + (jcol - 2) * n];
             }
-            /* alpha_j acts as upper bound for category c when j == c+2 and c <= K-2 */
-            if(jcol == c + 2 && c + 1 < mA - 1) {
-                dp +=  dF_dk(Aup, B2, r);
+
+            /* The raw alpha_j parameter affects all downstream cuts.
+             * For category c, only the finite lower cut (col c+1) and finite
+             * upper cut (col c+2) can contribute.
+             */
+            if(c >= 1 && jcol <= c + 1) {
+                dp += -scale * dF_dk(Aup, B1, r);
             }
-            /* top category: B2 = +Inf, derivative = 0 via dF_dk */
+            if(c + 1 < mA && jcol <= c + 2) {
+                dp += scale * dF_dk(Aup, B2, r);
+            }
 
             sc[i] = dp / p;
         }
@@ -1214,26 +1784,33 @@ SEXP score_alpha_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho,
 }
 
 SEXP hess_alpha_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho,
-                         SEXP Alpha, SEXP J)
+                         SEXP Alpha, SEXP Y, SEXP J)
 {
     Eta1  = PROTECT(coerceVector(Eta1,  REALSXP));
     Eta2  = PROTECT(coerceVector(Eta2,  REALSXP));
     Rho   = PROTECT(coerceVector(Rho,   REALSXP));
     Alpha = PROTECT(coerceVector(Alpha, REALSXP));
+    Y     = PROTECT(coerceVector(Y,     INTSXP));
     J     = PROTECT(coerceVector(J,     INTSXP));
 
     const double *eta1 = REAL(Eta1);
     const double *eta2 = REAL(Eta2);
     const double *rhoV = REAL(Rho);
     const double *A    = REAL(Alpha);
+    int          *Yp   = INTEGER(Y);
     const int     jcol = INTEGER(J)[0];
 
     SEXP dimA = getAttrib(Alpha, R_DimSymbol);
-    if(TYPEOF(dimA) != INTSXP)
-        error("alpha must have dim attributes");
+    SEXP dimY = getAttrib(Y,     R_DimSymbol);
+    if(TYPEOF(dimA) != INTSXP || TYPEOF(dimY) != INTSXP)
+        error("alpha and y must have dim attributes");
 
     const int n   = INTEGER(dimA)[0];
     const int mA  = INTEGER(dimA)[1];
+    const int nY  = INTEGER(dimY)[0];
+    const int mY  = INTEGER(dimY)[1];
+    if(nY != n || mY != 2)
+        error("y must be an n x 2 matrix");
     if(mA < 2)
         error("alpha must have at least two columns");
     if(jcol < 1 || jcol > mA)
@@ -1246,99 +1823,18 @@ SEXP hess_alpha_dontknow(SEXP Eta1, SEXP Eta2, SEXP Rho,
         warning("rho length (%ld) not equal to n (%d); recycling will be used",
                 (long)nRho, n);
 
-    const int K     = mA - 1;  /* # ordinal categories */
     const int steps = 64;
 
     SEXP out = PROTECT(allocVector(REALSXP, n));
     double *w = REAL(out);
 
     for(int i = 0; i < n; ++i) {
-        const double rraw = rhoV[(nRho == 1) ? 0 : i];
-        double r = rraw;
-        if(r >=  1.0) r =  0.999999999;
-        if(r <= -1.0) r = -0.999999999;
-
-        const double alpha1_i = A[i + 0*n];
-        const double Aup = alpha1_i - eta1[i];
-
-        double I_alpha = 0.0;
-
-        /* --- contribution from dk cell (Y1=1) only if j=1 ---------------- */
-        if(jcol == 1) {
-            double p_dk = pnorm(Aup, 0.0, 1.0, 0, 0);
-            if(p_dk > 0.0 && R_FINITE(p_dk)) {
-                double phiA = dnorm(Aup, 0.0, 1.0, 0);
-                double dp   = -phiA;   /* dp_dk / d alpha1 */
-                I_alpha += (dp * dp) / p_dk;
-            }
-        }
-
-        /* --- contributions from all ordinal categories Y1=0,Y2=c ---------- */
-        for(int c = 0; c < K; ++c) {
-            double B1, B2;
-
-            if(c == 0) {
-                B1 = R_NegInf;
-            } else {
-                if(c >= mA)
-                    error("internal indexing error in hess_alpha_dontknow (B1) at row %d",
-                          i+1);
-                B1 = A[i + c * n] - eta2[i];
-            }
-
-            if(c + 1 >= K) {
-                B2 = R_PosInf;
-            } else {
-                int colU = c + 1;
-                if(colU >= mA)
-                    error("internal indexing error in hess_alpha_dontknow (B2) at row %d",
-                          i+1);
-                B2 = A[i + colU * n] - eta2[i];
-            }
-
-            double p_up, p_lo;
-            if(!R_FINITE(B2) && B2 > 0.0) {
-                p_up = pnorm(Aup, 0.0, 1.0, 1, 0);
-            } else {
-                p_up = bvn_cdf_miwa(Aup, B2, r, steps);
-            }
-            if(!R_FINITE(B1) && B1 < 0.0) {
-                p_lo = 0.0;
-            } else {
-                p_lo = bvn_cdf_miwa(Aup, B1, r, steps);
-            }
-
-            double p_c = p_up - p_lo;
-            if(p_c < 0.0 && p_c > -1e-15) p_c = 0.0;
-            if(p_c <= 0.0 || !R_FINITE(p_c)) continue;
-
-            double dp = 0.0;
-
-            if(jcol == 1) {
-                /* alpha1 via Aup: dp_c/d alpha1 = dF/dh(A,B2;r) - dF/dh(A,B1;r) */
-                double dF2 = dF_dh(Aup, B2, r);
-                double dF1 = dF_dh(Aup, B1, r);
-                dp = dF2 - dF1;
-            } else {
-                /* j>1: alpha_j affects B1/B2 for some c */
-                if(c >= 1 && jcol == c + 1) {
-                    dp += -dF_dk(Aup, B1, r);
-                }
-                if(jcol == c + 2 && c + 1 < K) {
-                    dp +=  dF_dk(Aup, B2, r);
-                }
-            }
-
-            if(dp != 0.0)
-                I_alpha += (dp * dp) / p_c;
-        }
-
-        double w_i = I_alpha;
-        if(!R_FINITE(w_i) || w_i <= 0.0) w_i = 1e-6;
-        w[i] = w_i;
+        const int y1 = Yp[i + 0*n];
+        const int y2 = Yp[i + 1*n];
+        w[i] = hess_alpha_obs(eta1[i], eta2[i], rhoV[(nRho == 1) ? 0 : i],
+                              A, n, mA, i, y1, y2, jcol, steps);
     }
 
-    UNPROTECT(6);
+    UNPROTECT(7);
     return out;
 }
-
