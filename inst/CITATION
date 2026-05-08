@@ -3,7 +3,7 @@ bibentry("InProceedings",
   booktitle = "Proceedings of the 39th International Workshop on Statistical Modelling",
   address = "Limerick, Ireland",
   year = "2025",
-  url = "https://iwsm2025.ie/wp-content/uploads/2025/07/IWSM2025_Limerick_Proceedings.pdf",
+  url = "https://iwsm2025.ie/",
   pages = "201--206",
   author = c(
     person("Andreas", "Groll", comment = c(ORCID = "0000-0001-6787-9118")),
