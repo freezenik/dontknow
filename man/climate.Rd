@@ -40,8 +40,7 @@ data("climate")
     }
     \item{age}{
       Integer giving the respondent's age in years
-      (recoded from item \code{d11}). Only respondents with
-      \code{age >= 20} are retained.
+      (recoded from item \code{d11}).
     }
     \item{education}{
       Factor describing the highest level of education attained, with
