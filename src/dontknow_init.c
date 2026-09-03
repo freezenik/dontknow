@@ -13,7 +13,7 @@ SEXP hess_mu1_dontknow(SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP hess_mu2_dontknow(SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP score_alpha_dontknow(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP hess_alpha_dontknow(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-SEXP z_weights_dontknow(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP update_dontknow(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 
 static R_CallMethodDef callMethods[] = {
   {"logLik_dontknow", (DL_FUNC) &logLik_dontknow, 7},
@@ -25,7 +25,7 @@ static R_CallMethodDef callMethods[] = {
   {"hess_mu2_dontknow",  (DL_FUNC) &hess_mu2_dontknow,  5},
   {"score_alpha_dontknow",(DL_FUNC) &score_alpha_dontknow,6},
   {"hess_alpha_dontknow", (DL_FUNC) &hess_alpha_dontknow, 6},
-  {"z_weights_dontknow",  (DL_FUNC) &z_weights_dontknow,  7},
+  {"update_dontknow",  (DL_FUNC) &update_dontknow,  7},
   {NULL, NULL, 0}
 };
 

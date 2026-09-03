@@ -425,7 +425,7 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
     alpha <- build_alpha_raw(par)
 
     .Call(
-      "z_weights_dontknow",
+      "update_dontknow",
       y,
       as.numeric(eta),
       as.numeric(par$mu1),

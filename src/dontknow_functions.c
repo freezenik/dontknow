@@ -801,7 +801,7 @@ static inline void zw_alpha_obs(double eta1i, double eta2i, double rhoi,
     *hess = (p1 * p1) / (p * p) - p2 / p;
 }
 
-SEXP z_weights_dontknow(SEXP Y, SEXP Eta, SEXP Mu1, SEXP Mu2,
+SEXP update_dontknow(SEXP Y, SEXP Eta, SEXP Mu1, SEXP Mu2,
                         SEXP Rho, SEXP Alpha, SEXP J)
 {
     Y     = PROTECT(coerceVector(Y,     INTSXP));
@@ -901,7 +901,7 @@ SEXP z_weights_dontknow(SEXP Y, SEXP Eta, SEXP Mu1, SEXP Mu2,
     SET_VECTOR_ELT(out, 1, weights);
 
     SEXP names = PROTECT(allocVector(STRSXP, 2));
-    SET_STRING_ELT(names, 0, mkChar("z"));
+    SET_STRING_ELT(names, 0, mkChar("eta"));
     SET_STRING_ELT(names, 1, mkChar("weights"));
     setAttrib(out, R_NamesSymbol, names);
 
