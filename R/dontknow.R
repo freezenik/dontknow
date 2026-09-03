@@ -164,7 +164,7 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
     }
   )
 
-  f$cdf <- function(y, par, lower.tail = TRUE, log.p = FALSE, ...) {
+  f$cdf <- function(par, y, lower.tail = TRUE, log.p = FALSE, ...) {
     probs <- f$probabilities(par)          ## n x (K_cat+1)
     n     <- nrow(probs)
     K_cat <- ncol(probs) - 1L              ## Y2 categories 0, ..., K_cat-1
@@ -280,7 +280,7 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
   f$score <- list()
   f$hess  <- list()
 
-  f$score$rho <- function(y, par, ...) {
+  f$score$rho <- function(par, y,...) {
     y <- as.matrix(y)
 
     ## alpha matrix with increasing cuts (same as in pdf/logLik)
@@ -297,7 +297,7 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
     )
   }
 
-  f$hess$rho <- function(y, par, ...) {
+  f$hess$rho <- function(par, y, ...) {
     alpha <- build_alpha(par)
 
     .Call(
@@ -312,7 +312,7 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
   }
 
   ## score wrt eta_mu1
-  f$score$mu1 <- function(y, par, ...) {
+  f$score$mu1 <- function(par, y, ...) {
     y <- as.matrix(y)
 
     alpha <- build_alpha(par)
@@ -329,7 +329,7 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
   }
 
   ## score wrt eta_mu2
-  f$score$mu2 <- function(y, par, ...) {
+  f$score$mu2 <- function(par, y, ...) {
     y <- as.matrix(y)
 
     alpha <- build_alpha(par)
@@ -346,7 +346,7 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
   }
 
   ## Hessian (Fisher info) wrt eta_mu1
-  f$hess$mu1 <- function(y, par, ...) {
+  f$hess$mu1 <- function(par, y, ...) {
     alpha <- build_alpha(par)
 
     .Call(
@@ -361,7 +361,7 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
   }
 
   ## Hessian (Fisher info) wrt eta_mu2
-  f$hess$mu2 <- function(y, par, ...) {
+  f$hess$mu2 <- function(par, y, ...) {
     alpha <- do.call("cbind", par[alpha_names])
     if(k > 2L) {
       alpha[, -1L] <- t(apply(alpha[, -1L], 1L, inc2cut))
@@ -385,7 +385,7 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
     ## score wrt alpha_j
     f$score[[par_name]] <- local({
       j <- j_idx
-      function(y, par, ...) {
+      function(par, y, ...) {
         y <- as.matrix(y)
         alpha <- build_alpha(par)
         .Call(
@@ -404,7 +404,7 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
     ## hessian (Fisher) wrt alpha_j
     f$hess[[par_name]] <- local({
       j <- j_idx
-      function(y, par, ...) {
+      function(par, y, ...) {
         alpha <- build_alpha(par)
         .Call(
           "hess_alpha_dontknow",
@@ -420,19 +420,19 @@ DK <- function(k = 4, useC = c(TRUE, TRUE, TRUE))
     })
   }
 
-  f$z_weights <- function(y, eta, peta, j) {
+  f$update <- function(par, y, eta, which) {
     y <- as.matrix(y)
-    alpha <- build_alpha_raw(peta)
+    alpha <- build_alpha_raw(par)
 
     .Call(
       "z_weights_dontknow",
       y,
       as.numeric(eta),
-      as.numeric(peta$mu1),
-      as.numeric(peta$mu2),
-      as.numeric(peta$rho),
+      as.numeric(par$mu1),
+      as.numeric(par$mu2),
+      as.numeric(par$rho),
       alpha,
-      as.character(j),
+      as.character(which),
       PACKAGE = "dontknow"
     )
   }
