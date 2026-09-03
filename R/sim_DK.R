@@ -1,4 +1,4 @@
-sim_DK <- function(n = 1000, rho = NULL, shift = 0)
+sim_DK <- function(n = 1000, rho = NULL, shift = 0, a = 1)
 {
   stopifnot(requireNamespace("mvtnorm"))
 
@@ -41,13 +41,15 @@ sim_DK <- function(n = 1000, rho = NULL, shift = 0)
   d$mu1 <- d$fx1 + d$fid1 + shift
   d$mu2 <- d$fx2 + d$fid2
 
+  rl <- make.link2("rhogit")
+
   if(is.null(rho)) {
     d$rho <- d$fx3 + d$fid3
   } else {
-    d$rho <- rep(rho, length.out = n)
+    d$rho <- rl$linkfun(rep(rho, length.out = n))
   }
+  d$rho <- a * d$rho
 
-  rl <- make.link2("rhogit")
   d$rho <- rl$linkinv(d$rho)
 
   alpha1 <- c(-Inf, 0, Inf)
