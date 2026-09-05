@@ -62,5 +62,5 @@ Implementation note:
 
 `DK(4)` uses compiled code by default for the log-likelihood, score, and
 observed Hessian. When score and Hessian are both enabled, the family also uses
-a fused compiled `update` function for faster RS updates in `gamlss2`.
+a fused compiled `$update()` function for faster RS updates in `gamlss2`.
 
