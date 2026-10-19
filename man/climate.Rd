@@ -2,10 +2,10 @@
 \alias{climate}
 \docType{data}
 
-\title{Climate change attitudes with \dQuote{don't know} option from Eurobarometer 101.1}
+\title{Climate change attitudes with \dQuote{don't know} option from Eurobarometer 95.1}
 
 \description{
-  A processed subset of the Eurobarometer 101.1 (2024) survey containing
+  A processed subset of the Eurobarometer 95.1 (2021) survey containing
   an item on attitudes towards climate change together with selected
   socio-demographic covariates. The response is a Likert-type variable
   with an explicit \dQuote{don't know} category, used in the empirical
@@ -90,7 +90,7 @@ data("climate")
 }
 
 \details{
-  The original Eurobarometer 101.1 micro data were imported using
+  The original Eurobarometer 95.1 micro data were imported using
   \pkg{haven} from the GESIS-provided Stata file
   \code{ZA7781\_v2-0-0.dta}. Categorical variables were reconstructed
   from the value labels, and a set of derived covariates was created to
@@ -106,10 +106,10 @@ data("climate")
 }
 
 \source{
-  European Commission and European Parliament, Brussels (2025).
-  \emph{Eurobarometer 101.1 (2024)}.
-  (ZA8841; Version 1.0.0) [Data set]. GESIS, Koeln.
-  \doi{10.4232/1.14461}.
+  European Commission and European Parliament, Brussels (2023).
+  \emph{Eurobarometer 95.1 (2021)}.
+  (ZA7781; Version 2.0.0) [Data set]. GESIS, Koeln.
+  \doi{10.4232/1.14079}.
   \url{https://search.gesis.org/research_data/ZA7781}
 }
 
