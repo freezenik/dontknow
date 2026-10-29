@@ -536,7 +536,7 @@ rqres_DK_indicator <- function(object, ...)
 
   mf <- model.frame(object)
   Y  <- mf$Y
-  par   <- predict(object)
+  par   <- predict(object, type = "parameter")
   probs <- fam$probabilities(par)
 
   y1 <- Y[, 1L]
@@ -560,7 +560,7 @@ rqres_DK_ordinal <- function(object, ...)
 
   mf   <- model.frame(object)
   Y    <- mf$Y
-  par  <- predict(object)
+  par  <- predict(object, type = "parameter")
   probs <- fam$probabilities(par)
 
   y1 <- Y[, 1L]
