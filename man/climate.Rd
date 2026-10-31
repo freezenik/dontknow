@@ -17,7 +17,7 @@ data("climate")
 }
 
 \format{
-  A data frame with 25803 observations (after
+  A data frame with 26621 observations (after
   filtering and listwise deletion of missing values) on the following
   9 variables:
   \describe{
@@ -146,7 +146,7 @@ f <- Y ~ -1 + s(age) + la(gender, type = 2) + la(education, type = 3) |  ## y1
          -1 + la(occupation, type = 4) + la(country, type = 4) |         ## y2
          1                                                               ## rho
 
-m <- gamlss2(f, family = DK(4), data = d)
+m <- gamlss2(f, family = DK(4), data = d, criterion = "bic")
 summary(m)
 }}
 
